@@ -11,3 +11,4 @@ app.include_router(mcp_router, prefix="/mcp")
 def read_root():
     return {"message": "GenAI Middleware API is running"}
 
+
