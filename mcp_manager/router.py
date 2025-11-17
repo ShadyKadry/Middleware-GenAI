@@ -16,7 +16,10 @@ class ToolInvocation(BaseModel):
     tool_name: str
     jsonrpc_payload: dict
 
-@router.post("/register_tool")
+class RegistrationResponse(BaseModel):
+    message: str
+
+@router.post("/register_tool", response_model=RegistrationResponse)
 def register_tool(tool: ToolRegistration):
     if tool.name in tool_registry:
         raise HTTPException(status_code=400, detail="Tool already registered.")
