@@ -19,13 +19,14 @@ Before starting you need to ensure you have the following on your machine:
 
 ## Set-Up
 
-1. Open the `Dive AI` desktop application. If asked to choose between `Local MCP servers` and `OAP Cloud Services`, choose the local variant.
-2. You should see a **chat interface**, with a button next to it where you can select your model. Select `Gemini Flash 2.5` (as suggested
-by Bach) and use your Google AI API key in the respective field to get access.
-3. You should now be able to input prompts and get responses. (You're simply using `Gemini Flash 2.5` at this point.)
-4. On the bottom right of the chat window you should see a button with a small tool icon. Click on it and navigate to the `MCP tool registry`.
-5. You should see a single MCP server available which is named `echo`. Click on the green button above which lets you add new servers/configurations.
-6. Now register the middleware application (implemented as MCP server) by copying the following into the JSON field on the right:
+1. Go to the root of the repository and create a new virtual environment (name it `.venv`), using the `requirements.txt` file and `python3.12`.
+2. Open the `Dive AI` desktop application. If asked to choose between `Local MCP servers` and `OAP Cloud Services`, choose the local variant.
+3. You should see a **chat interface**, with a button next to it where you can select your model. Select `Gemini Flash 2.5` (as suggested
+by Bach) and use your **Google AI API key** in the respective field to get access.
+4. You should now be able to input prompts and get responses. (You're simply using `Gemini Flash 2.5` at this point.)
+5. On the bottom right of the chat window you should see a button with a small tool icon. Click on it and navigate to the `MCP tool registry`.
+6. You should see a single MCP server available which is named `echo`. Click on the green button above which lets you add new servers/configurations.
+7. Now register the middleware application (implemented as MCP server) by copying the following into the JSON field on the right:
 ```
 {
   "mcpServers": {
@@ -43,8 +44,8 @@ by Bach) and use your Google AI API key in the respective field to get access.
 }
 ```
 * NOTE: Its important that you use the absolute path (i.e. starting from /Users on Mac)
-7. The middleware application and all its 3 tools should now be available as a single MCP server and can be toggled on/off in the chat interface.
-8. The MCP Client/LLM chatbot (i.e. `Gemini Flash 2.5`) is now able to interact with the middleware server through MCP.
+8. The middleware application and all its 3 tools should now be available as a single MCP server and can be toggled on/off in the chat interface.
+9. The MCP Client/LLM chatbot (i.e. `Gemini Flash 2.5`) is now able to interact with the middleware server through MCP.
 
 ---
 
