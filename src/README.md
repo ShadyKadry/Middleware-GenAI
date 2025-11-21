@@ -60,9 +60,8 @@ The way the LLM chatbot will integrate them is by parsing the prompt and looking
 server. If the description of a tool matches the prompt semantically (it does not have to match the description perfectly), 
 it will be called to provide a response. 
 
-### Examples
-Make sure that the middleware-genai MCP server is used for responses (deactivate `echo` server just in case) and all 
-three tools are accessible.
+### Examples - MCP usage
+Make sure that the middleware-genai MCP server is used for responses (deactivate `echo` server just in case) and all tools are accessible.
 
 ```
 Prompt: hello
@@ -100,3 +99,44 @@ The purpose of learning more about MCP and GenAI is to finish the Fraunhofer AMT
 ```
 
 You can also provide a prompt which triggers multiple tools for the same response or ask the LLM chatbot to do something with the response directly.
+
+### Examples - RAG usage
+Make sure that the middleware-genai MCP server is used for responses (deactivate `echo` server just in case) and ensure 
+that `document_store.document.index` and `document_store.document.search` are available. Additionally make sure that you 
+started the database (i.e. Qdrant) as a docker container to actually be able to store information and make the interaction 
+stateful. The container can be started by opening DockerDesktop (to make the `docker` command available) and thereafter 
+run the following in the terminal:
+```
+docker run -p 6333:6333 qdrant/qdrant
+```
+This will start the database and you can inspect its structure in detail through the Qdrant UI at specified port 6333 (i.e. go 
+to http://localhost:6333/dashboard#/welcome). You can also look at the individual information stored there by looking 
+inside its collections.
+
+In order to change or add to the databases content, you can insert any textual information to the database by specifying 
+the `user_id` and `corpus_id` that you want to store this for. You can also create a new collection on the database like this
+(identified by the `corpus_id`), by using a non-existent `corpus_id`.
+
+To give an example, within the chat interface you could ask to store some information like this:
+```
+Prompt: can you store this sentence: "When is George coming back?" in the "demo_corpus" for the user_id "user"?
+Response: [calling document_store.document.index]
+The sentence "When is George coming back?" has been stored in the "demo_corpus" for user "user".
+```
+
+After it has been stored successfully, you can also search for it directly or for sematically similar content, e.g:
+```
+Prompt: can you search for 5 most important information in demo_corpus regarding "When is George coming back?" ? user id is: "user"
+Reponse: [calling document_store.document.search]
+Here are the 5 most important pieces of information found in "demo_corpus" regarding "When is George coming back?" for user "user":
+
+"When is George coming back?" (This is the exact sentence you stored, with a perfect score of 1.0)
+"I would like to learn less about RAG." (Score: 0.109)
+"Python is a popular programming language for data science." (Score: 0.078)
+"The stock market can be very volatile during economic crises." (Score: 0.061)
+"Mount Everest is the highest mountain above sea level." (Score: 0.056)
+It appears that only the first result is directly relevant to your query. The other results have very low similarity scores and are likely unrelated.
+```
+It successfully retrieves stored content for the specified user and also returns the 5 most similar information (keep in 
+mind that our current embedding model is not sophisticated enough to capture real semantic similarities -> using an actual 
+trained embeddng model should fix this issue).

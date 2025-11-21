@@ -22,10 +22,12 @@ from mcp_manager import ToolRegistry, build_tool_registry
 # --------------------------------------------------------------------
 # Build aggregated registry from your backend "servers"
 # --------------------------------------------------------------------
+import sys
+print("Started middleware application...", file=sys.stderr)
 
-registry: ToolRegistry = build_tool_registry()
+registry: ToolRegistry | None = None
 
-# Create the MCP server instance (this is what DiveAI will talk to)
+# create the MCP server instance (this is what DiveAI is talking to)
 server = Server("diveai-middleware")
 
 
@@ -107,6 +109,11 @@ async def run() -> None:
     This replaces the old while True / json.loads loop – the SDK
     handles MCP handshake, JSON-RPC, batching, etc.
     """
+    # TODO: obtain only subset of available MCP servers based o authenticated user
+    global registry  # references the global variable at the beginning of the script
+    tool_registry: ToolRegistry = await build_tool_registry() # currently done once at beginning of execution -> TODO: make dynamic (by moving to a class object which is instanced?)
+    registry = tool_registry
+
     async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
         await server.run(
             read_stream,
