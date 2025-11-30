@@ -4,6 +4,10 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import httpx
 
+from content_manager import create_document, get_document
+from embedding_manager import embed_document, search_similar
+
+
 router = APIRouter()
 tool_registry = {}
 
@@ -40,4 +44,41 @@ def invoke_tool(payload: ToolInvocation):
         return response.json()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ---- Document management endpoints (backed by Postgres) ----
+
+class DocumentCreate(BaseModel):
+    title: str
+    content: str
+
+class SearchRequest(BaseModel):
+    query: str
+    top_k: int = 5
+
+
+@router.post("/docs")
+def create_doc(doc: DocumentCreate):
+    doc_id = create_document(doc.title, doc.content)
+    return {"id": doc_id, "title": doc.title}
+
+
+@router.get("/docs/{doc_id}")
+def get_doc(doc_id: int):
+    doc = get_document(doc_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    return doc
+
+@router.post("/docs/{doc_id}/embed")
+def embed_doc(doc_id: int):
+    try:
+        embed_document(doc_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return {"status": "ok", "document_id": doc_id}
+
+@router.post("/search")
+def search(req: SearchRequest):
+    results = search_similar(req.query, req.top_k)
+    return {"results": results}
 
