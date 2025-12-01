@@ -1,8 +1,8 @@
 import asyncio
 
-from ..qdrant_store import QdrantVectorStore
-from ..embedding_manager import EmbeddingManager
-from ..embedding_backend import StubEmbeddingModel
+from db.qdrant_store import QdrantVectorStore
+from embedding_manager.embedding_manager import EmbeddingManager
+from embedding_manager.embedding_backend import StubEmbeddingModel
 
 """ 
     How to run it, in:

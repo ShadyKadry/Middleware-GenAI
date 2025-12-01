@@ -1,7 +1,7 @@
 
 from typing import Any, Dict, List, Optional, Sequence
 from qdrant_client.models import Filter, FieldCondition, MatchValue
-from vector_store import VectorStore
+from db.vector_store import VectorStore
 from embedding_backend import EmbeddingModel
 
 

@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
 
-from embedding_backend import StubEmbeddingModel  # or GeminiEmbeddingModel
-from embedding_manager import EmbeddingManager
-from qdrant_store import QdrantVectorStore
+from embedding_manager.embedding_backend import StubEmbeddingModel  # or GeminiEmbeddingModel
+from embedding_manager.embedding_manager import EmbeddingManager
+from db.qdrant_store import QdrantVectorStore
 
 
 # ------------------------------
