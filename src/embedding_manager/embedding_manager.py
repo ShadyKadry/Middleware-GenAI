@@ -37,7 +37,6 @@ class EmbeddingManager:
     # ------------------------------
     # Public API
     # ------------------------------
-    # FIXME: buggy atm
     async def upsert_documents(
         self,
         user_id: str,
