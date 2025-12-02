@@ -73,14 +73,16 @@ class EmbeddingManager:
             )
 
         # save new documents in database
-        await self.vector_store.upsert_records(
+        upsert_result = await self.vector_store.upsert_records(
             collection=corpus_id,
             records=records,
         )
 
         return {
-            "status": "ok",
-            "indexed_count": len(documents),
+            "status": "ok" if upsert_result.status == "ok" else "error",
+            "indexed_count": upsert_result.indexed_count,
+            "requested_count": len(documents),
+            "failed_ids": upsert_result.failed_ids,
         }
 
     async def search_documents(

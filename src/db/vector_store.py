@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Protocol, Sequence, Optional
 
 
@@ -8,7 +8,7 @@ class VectorRecord:
     A standard, backend-agnostic representation of a single vectorized document.
 
     Attributes:
-        id (str): TODO might require refactor when real-world documents are uploaded
+        id (str):
             Optional external ID provided by the caller. Backends may use this to derive their
             own internal primary key, or ignore it and generate their own IDs.
 
@@ -21,7 +21,7 @@ class VectorRecord:
             Backends may store this as JSON, key–value payloads, table columns, etc.
             Must be JSON-serializable to guarantee compatibility across vector DBs.
     """
-    id: Optional[str]
+    id: Optional[str]  # currently optional -> might require refactor when real-world documents are uploaded
     vector: List[float]
     metadata: Dict[str, Any]
 
@@ -31,6 +31,15 @@ class SearchResult:
     id: str
     score: float
     metadata: Dict[str, Any]
+
+
+@dataclass
+class UpsertResult:
+    status: str
+    indexed_count: int
+    failed_ids: List[str] = field(default_factory=list)
+    raw: Optional[Any] = None  # raw backend result for debugging
+
 
 
 class VectorStore(Protocol):
@@ -73,7 +82,7 @@ class VectorStore(Protocol):
             self,
             collection: str,
             records: List[VectorRecord],
-    ) -> None:
+    ) -> UpsertResult:
         """
         Insert or update vector records in the backend.
 

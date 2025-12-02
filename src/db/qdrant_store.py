@@ -8,7 +8,7 @@ from qdrant_client.models import (
     Filter,
 )
 
-from db.vector_store import SearchResult, VectorRecord, VectorStore
+from db.vector_store import SearchResult, VectorRecord, VectorStore, UpsertResult
 from qdrant_client.models import FieldCondition, MatchValue
 
 
@@ -47,11 +47,11 @@ class QdrantVectorStore(VectorStore):
                 ),
             )
 
-    async def upsert_points(
+    async def upsert_records(
         self,
         collection: str,
         records: List[VectorRecord],
-    ) -> None:
+        ) -> UpsertResult:
         # create new database entries
         points: List[PointStruct] = []
         for record in records:
@@ -66,10 +66,28 @@ class QdrantVectorStore(VectorStore):
             points.append(PointStruct(id=point_id, vector=record.vector, payload=record.metadata))
 
         # upload them to the database
-        await self.client.upsert(
+        update_result = await self.client.upsert(
             collection_name=collection,
             points=points,
             wait=True,
+        )
+
+        # normalize qdrant status to a plain lowercase string
+        status_raw = getattr(update_result, "status", None)
+        if status_raw is None and isinstance(update_result, dict):
+            status_raw = update_result.get("status")
+
+        # enum-safe: UpdateStatus.COMPLETED → "completed"
+        status_str = getattr(status_raw, "value", status_raw)
+        status_str = str(status_str).lower()
+
+        is_ok = status_str in ("completed", "acknowledged")
+
+        return UpsertResult(
+            status="ok" if is_ok else "error",
+            indexed_count=len(records) if is_ok else 0,
+            failed_ids=[] if is_ok else [str(r.id) for r in records if r.id is not None],
+            raw=update_result,
         )
 
     async def search(
@@ -157,7 +175,7 @@ class QdrantVectorStore(VectorStore):
                 )
             )
 
-        await self.upsert_points(
+        await self.upsert_records(
             collection=collection,
             records=records,
         )
