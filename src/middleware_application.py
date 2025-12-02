@@ -120,10 +120,10 @@ async def run() -> None:
     current_principal = {
         "user_id": username,
         "roles": roles,
-        "token": token,
+        "token": token,  # not used at the moment
     }
 
-    tool_registry: ToolRegistry = await build_middleware_tool_registry(current_principal) # currently done once at beginning of execution -> TODO: make dynamic (by moving to a class object which is instanced?)
+    tool_registry: ToolRegistry = await build_middleware_tool_registry(current_principal) # currently done once at beginning of execution -> TODO: how will this be affected once multi-user access at same time has to be guaranteed
     registry = tool_registry
 
     async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
