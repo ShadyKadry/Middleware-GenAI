@@ -1,0 +1,18 @@
+{
+  "backends": [
+    {
+      "name": "hr",
+      "factory": "hr",
+      "required_roles": ["normal_user", "admin"],
+      "allowed_users": ["user"],
+      "enabled": true
+    },
+    {
+      "name": "jira",
+      "factory": "jira",
+      "required_roles": ["normal_user", "admin"],
+      "allowed_users": ["user", "user-17"],
+      "enabled": true
+    }
+  ]
+}
