@@ -1,16 +1,29 @@
+from dataclasses import asdict
+from typing import Any, Dict, List, Sequence
+from db.vector_store import VectorStore, VectorRecord
+from .embedding_backend import EmbeddingModel
 
-from typing import Any, Dict, List, Optional, Sequence
-from qdrant_client.models import Filter, FieldCondition, MatchValue
-from db.vector_store import VectorStore
-from embedding_backend import EmbeddingModel
+
+def build_access_constraints(user_id: str) -> dict:
+    """
+    Restrict read access to documents that belong to the provided user ID.
+    """
+
+    return {"user_id": user_id}
 
 
 class EmbeddingManager:
     """
-    Handles:
-      - embedding text via an embedding pipeline
-      - storing vectors in a vector store (Qdrant, etc.)
-      - semantic search with user-based access control
+    High-level orchestration component for embedding and retrieval.
+
+    Responsibilities:
+      - generate embeddings using a configured embedding model
+      - upsert and retrieve vectors through a VectorStore abstraction
+        (Qdrant, pgvector, Milvus, etc.)
+      - apply user-level access constraints during semantic search
+
+    This class contains no backend-specific logic; individual VectorStore
+    implementations handle their own filtering, storage, and querying.
     """
 
     def __init__(
@@ -19,13 +32,13 @@ class EmbeddingManager:
         vector_store: VectorStore,
     ) -> None:
         self.embedding_model = embedding_model
-        self.vector_store = vector_store  # the vector DB to use TODO use multiple DBs
+        self.vector_store = vector_store  # the vector DB instance to use
 
     # ------------------------------
     # Public API
     # ------------------------------
-
-    async def index_documents(
+    # FIXME: buggy atm
+    async def upsert_documents(
         self,
         user_id: str,
         corpus_id: str,
@@ -34,32 +47,35 @@ class EmbeddingManager:
         """
         documents: List[{"id": str (optional), "text": str, ...extras}]
         """
+        # create vector embeddings
         texts = [d["text"] for d in documents]
         vectors = self.embedding_model.embed(texts)
 
+        # make sure the collection to save into actually exists
         dim = self.embedding_model.dim
-        await self.vector_store.ensure_collection(corpus_id, dim)
+        await self.vector_store.get_or_create_collection(corpus_id, dim)
 
-        payloads: List[Dict[str, Any]] = []
-        ids: List[str] = []
-
-        # create a new payload for each document/text we want to upload TODO other DBs than Qdrant might expect something different
-        for doc in documents:
-            payload = dict(doc)
-            payload["user_id"] = user_id
-            payload["corpus_id"] = corpus_id
-            payloads.append(payload)
-            if "id" in doc:
-                ids.append(str(doc["id"]))
-
-        ids_list: Optional[List[str]] = ids if ids else None
+        # create a new database-agnostic data transfer object for each document/text we want to upload
+        records: List[VectorRecord] = []
+        for document, vector in zip(documents, vectors):
+            # data to store
+            metadata: Dict[str, Any] = {
+                **document,
+                "user_id": user_id,
+                "corpus_id": corpus_id,
+            }
+            records.append(
+                VectorRecord(
+                    id=str(document["id"]) if "id" in document else None,
+                    vector=vector,
+                    metadata=metadata,
+                )
+            )
 
         # save new documents in database
-        await self.vector_store.upsert_points(
+        await self.vector_store.upsert_records(
             collection=corpus_id,
-            vectors=vectors,
-            payloads=payloads,
-            ids=ids_list,
+            records=records,
         )
 
         return {
@@ -67,7 +83,7 @@ class EmbeddingManager:
             "indexed_count": len(documents),
         }
 
-    async def semantic_search(
+    async def search_documents(
         self,
         user_id: str,
         corpus_id: str,
@@ -78,38 +94,18 @@ class EmbeddingManager:
         query_vec = vectors[0]
         dim = self.embedding_model.dim
 
-        await self.vector_store.ensure_collection(corpus_id, dim)
-
-        query_filter = self._build_read_filter(user_id)
+        await self.vector_store.get_or_create_collection(corpus_id, dim)
 
         # search for query_vector within database
         hits = await self.vector_store.search(
-            collection=corpus_id,
+            collection=corpus_id,  # some other backends might interpret this differently
             query_vector=query_vec,
             k=k,
-            query_filter=query_filter,
+            access_constraints=build_access_constraints(user_id),  # responsibility of each backend to enforce this
         )
 
         return {
             "query": query,
             "corpus_id": corpus_id,
-            "results": hits,
+            "results": [asdict(r) for r in hits],
         }
-
-    # ------------------------------
-    # Internal helpers
-    # ------------------------------
-
-    def _build_read_filter(self, user_id: str) -> Optional[Filter]:
-        """
-        Restrict read access to documents that belong to the provided user ID.
-        """
-        return Filter(
-            must=[
-                FieldCondition(
-                    key="user_id",
-                    match=MatchValue(value=user_id),
-                )
-            ]
-        )
-

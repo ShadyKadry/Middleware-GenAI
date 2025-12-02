@@ -87,7 +87,7 @@ class MockBackendServer:
 
 
 # TODO: replace with actual MCP servers available to the user (no user logic here yet). Create each as a single class and load based on user?
-def build_mock_backends() -> List[MockBackendServer]:
+def build_mcp_servers() -> List[MockBackendServer]:
     """
     Build two simple backend servers with a couple of tools.
     This simulates "multiple MCP servers" in Phase 1.
@@ -179,15 +179,15 @@ def build_mock_backends() -> List[MockBackendServer]:
 
 
 # TODO - User authentication: this should build the tool registry dynamically based on the calling user
-async def build_tool_registry() -> ToolRegistry:
+async def build_middleware_tool_registry() -> ToolRegistry:
     """
     Connect mock backends and aggregate their tools into a single registry.
     """
     registry = ToolRegistry()
-    backends = build_mock_backends()
+    backends = build_mcp_servers()
 
     # add the document store backend
-    backends.append(await build_embedding_backend())
+    backends.append(await build_embedding_manager())
 
     for backend in backends:
         for tool in backend.get_tools():
@@ -196,7 +196,7 @@ async def build_tool_registry() -> ToolRegistry:
     return registry
 
 
-async def build_embedding_backend() -> MockBackendServer:
+async def build_embedding_manager() -> MockBackendServer:
     """
     Creates a new MCP server which deploys the embedding manager, and exposes two tools to the MCP client:
         - injecting data to DB (i.e. index_docs)
@@ -215,15 +215,15 @@ async def build_embedding_backend() -> MockBackendServer:
 
     backend = MockBackendServer("document_store")
 
-    async def index_docs(args: Dict[str, Any]) -> Dict[str, Any]:
-        return await em.index_documents(
+    async def upsert_docs(args: Dict[str, Any]) -> Dict[str, Any]:
+        return await em.upsert_documents(
             user_id=args["user_id"],
             corpus_id=args["corpus_id"],
             documents=args["documents"],
         )
 
     async def search_docs(args: Dict[str, Any]) -> Dict[str, Any]:
-        return await em.semantic_search(
+        return await em.search_documents(
             user_id=args["user_id"],
             corpus_id=args["corpus_id"],
             query=args["query"],
@@ -252,7 +252,7 @@ async def build_embedding_backend() -> MockBackendServer:
             },
             "required": ["user_id", "corpus_id", "documents"],
         },
-        handler=index_docs,
+        handler=upsert_docs,
     )
 
     backend.add_tool(

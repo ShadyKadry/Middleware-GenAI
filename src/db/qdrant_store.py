@@ -7,15 +7,34 @@ from qdrant_client.models import (
     PointStruct,
     Filter,
 )
-from vector_store import VectorStore
 
+from db.vector_store import SearchResult, VectorRecord, VectorStore
+from qdrant_client.models import FieldCondition, MatchValue
+
+
+# create Qdrant specific access filter
+def build_access_filter(access_constraints: dict) -> Optional[Filter]:
+    """
+    Restrict read access to documents that belong to the provided constraints. (user_id only for now)
+    """
+    if not access_constraints or "user_id" not in access_constraints:
+        raise PermissionError("No user_id in access constraints")  # will this break app execution? should be unreachable anyways...
+    return Filter(
+        must=[
+            FieldCondition(
+                key="user_id",
+                match=MatchValue(value=access_constraints["user_id"]),
+            )
+        ]
+    )
 
 class QdrantVectorStore(VectorStore):
+
     # IMPORTANT: make sure you have the Qdrant docker container up-and-running -> docker run -p 6333:6333 qdrant/qdrant (in terminal)
     def __init__(self, host: str = "localhost", port: int = 6333):
         self.client = AsyncQdrantClient(host=host, port=port)
 
-    async def ensure_collection(self, name: str, dim: int) -> None:
+    async def get_or_create_collection(self, name: str, dim: int) -> None:
         # create_collection is idempotent; but might as well check existence first with get_collection
         try:
             await self.client.get_collection(name)
@@ -31,28 +50,20 @@ class QdrantVectorStore(VectorStore):
     async def upsert_points(
         self,
         collection: str,
-        vectors: Sequence[List[float]],
-        payloads: Sequence[Dict[str, Any]],
-        ids: Optional[Sequence[str]] = None,
+        records: List[VectorRecord],
     ) -> None:
-        norm_ids: List[str] = []
-
-        if ids is None:
-            # no IDs provided: make deterministic UUIDs from collection + index
-            for idx in range(len(vectors)):
-                raw = f"{collection}--{idx}"
-                norm_ids.append(str(uuid.uuid5(uuid.NAMESPACE_DNS, raw)))
-        else:
-            # convert whatever is given into UUIDv5 based on its string
-            for raw in ids:
-                raw_str = str(raw)
-                norm_ids.append(str(uuid.uuid5(uuid.NAMESPACE_DNS, raw_str)))
-
         # create new database entries
-        points = [
-            PointStruct(id=pid, vector=v, payload=p)
-            for pid, v, p in zip(norm_ids, vectors, payloads)
-        ]
+        points: List[PointStruct] = []
+        for record in records:
+
+            if record.id is None:
+                # no ID provided: generate a random unique ID fixme record cannot be overwritten, replaced, or updated since same doc (without identifier) would result in different 'point_id'
+                point_id = (str(uuid.uuid4()))
+            else:
+                # convert whatever ID is given into UUIDv5 based on its string fixme upsert/overwrite semantics only when ID is unique
+                point_id = (str(uuid.uuid5(uuid.NAMESPACE_DNS, str(record.id))))
+
+            points.append(PointStruct(id=point_id, vector=record.vector, payload=record.metadata))
 
         # upload them to the database
         await self.client.upsert(
@@ -66,13 +77,13 @@ class QdrantVectorStore(VectorStore):
         collection: str,
         query_vector: List[float],
         k: int,
-        query_filter: Optional[Filter] = None,
-    ) -> List[Dict[str, Any]]:
+        access_constraints: dict,
+    ) -> List[SearchResult]:
         response = await self.client.query_points(
             collection_name=collection,
             query=query_vector,
             limit=k,
-            query_filter=query_filter,
+            query_filter=build_access_filter(access_constraints),  # create actual Qdrant filter implementation
             with_vectors=False,
             with_payload=True,
         )
@@ -83,15 +94,19 @@ class QdrantVectorStore(VectorStore):
         # each p is a ScoredPoint
         results = []
         for p in points:
-            results.append({
-                "id": p.id,  # the unique UUID point ID
-                "score": p.score,  # similarity score to query_vector
-                "payload": p.payload,  # the created payload incl. {text:"", idx:"", topic:"", user_id:""}
-            })
+            results.append(
+                SearchResult(
+                    id=p.id,  # the unique UUID point ID
+                    score=p.score,  # similarity score to query_vector
+                    metadata=p.payload  # the created metadata incl. {text:"", idx:"", topic:"", user_id:""}
+                )
+            )
 
         return results
 
-    # ---- FOR DEMO PURPOSE ----
+    #################################
+    # ---- FOR DEMO PURPOSE ONLY ----
+    #################################
     async def bootstrap_demo_corpus(
             self,
             embedding_model,
@@ -120,31 +135,29 @@ class QdrantVectorStore(VectorStore):
             "I would love to learn everything about RAG.",
             # ... extend this up if you like
         ]
-
         vectors = embedding_model.embed(sentences)
-        dim = embedding_model.dim
 
         # ensure collection exists
-        await self.ensure_collection(collection, dim)
+        dim = embedding_model.dim
+        await self.get_or_create_collection(collection, dim)
 
-        payloads: List[Dict[str, Any]] = []
-        ids: List[str] = []
-
-        for idx, sentence in enumerate(sentences):
-            # we could also add any other key-value pair which might be beneficial (for filtering etc. [e.g. categorical values])
-            payloads.append(
-                {
-                    "text": sentence,
-                    "idx": idx,  # not necessary to append this for any logic ATM
-                    "topic": "demo",  # TODO: should we configure this? is this important?
-                    "user_id": user
-                }
+        # create a new database-agnostic data transfer object for each document/text we want to upload
+        records: List[VectorRecord] = []
+        for idx, (sentence, vector) in enumerate(zip(sentences, vectors)):
+            # data to store
+            metadata: Dict[str, Any] = {
+                "text": sentence,
+                "user_id": user,
+            }
+            records.append(
+                VectorRecord(
+                    id=str(idx+1),  # needed to create unique point IDs (see upsert_points() above) fixme indexing from 0 is prone to accidental overwrites
+                    vector=vector,
+                    metadata=metadata,
+                )
             )
-            ids.append(str(idx+1)) # needed to create unique point IDs (see upsert_points() above)
 
         await self.upsert_points(
             collection=collection,
-            vectors=vectors,
-            payloads=payloads,
-            ids=ids,
+            records=records,
         )

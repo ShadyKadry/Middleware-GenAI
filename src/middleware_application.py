@@ -17,7 +17,7 @@ import mcp.types as types
 from mcp.server.lowlevel import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
 
-from mcp_manager import ToolRegistry, build_tool_registry
+from mcp_manager.mcp_manager import ToolRegistry, build_middleware_tool_registry
 
 # --------------------------------------------------------------------
 # Build aggregated registry from your backend "servers"
@@ -111,7 +111,7 @@ async def run() -> None:
     """
     # TODO: obtain only subset of available MCP servers based o authenticated user
     global registry  # references the global variable at the beginning of the script
-    tool_registry: ToolRegistry = await build_tool_registry() # currently done once at beginning of execution -> TODO: make dynamic (by moving to a class object which is instanced?)
+    tool_registry: ToolRegistry = await build_middleware_tool_registry() # currently done once at beginning of execution -> TODO: make dynamic (by moving to a class object which is instanced?)
     registry = tool_registry
 
     async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
