@@ -28,6 +28,7 @@ def build_access_filter(access_constraints: dict) -> Optional[Filter]:
         ]
     )
 
+
 class QdrantVectorStore(VectorStore):
 
     # IMPORTANT: make sure you have the Qdrant docker container up-and-running -> docker run -p 6333:6333 qdrant/qdrant (in terminal)

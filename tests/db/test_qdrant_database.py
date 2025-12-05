@@ -15,7 +15,6 @@ IMPORTANT:
         docker run -p 6333:6333 qdrant/qdrant
 """
 
-
 class TestQdrantEmbeddingManager(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         # Same wiring as your debug script
@@ -106,5 +105,5 @@ class TestQdrantEmbeddingManager(unittest.IsolatedAsyncioTestCase):
 
 
 if __name__ == "__main__":
-    # Allows `python tests/test_vector_databases.py` as well as `python -m unittest`
+    # Allows `python tests/db/test_vector_databases.py` as well as `python -m unittest`
     unittest.main()
