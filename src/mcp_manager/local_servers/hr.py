@@ -1,7 +1,9 @@
 from typing import Any, Dict
 from mcp_manager.mcp_manager import MockBackendServer
 
-def build_hr_server() -> MockBackendServer:
+SERVER_KEY = "hr"
+
+def build_backend() -> MockBackendServer:
     hr = MockBackendServer("hr")
 
     def hr_get_policy(args: Dict[str, Any]) -> Dict[str, Any]:

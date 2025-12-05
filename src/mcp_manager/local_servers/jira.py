@@ -1,7 +1,9 @@
 from typing import Any, Dict
 from mcp_manager.mcp_manager import MockBackendServer
 
-def build_jira_server() -> MockBackendServer:
+SERVER_KEY = "jira"
+
+def build_backend() -> MockBackendServer:
     jira = MockBackendServer("jira")
 
     def jira_search(args: Dict[str, Any]) -> Dict[str, Any]:

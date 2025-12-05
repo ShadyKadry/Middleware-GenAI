@@ -84,7 +84,7 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> dict[str, An
         # turns this into a proper JSON-RPC error for the client.
         raise ValueError(f"Unknown tool: {name}")
 
-    result = tool.handler(arguments)
+    result = await tool.handler(arguments)
 
     # Support both sync and async handlers
     if asyncio.iscoroutine(result):
@@ -122,6 +122,7 @@ async def run() -> None:
         "roles": roles,
         "token": token,  # not used at the moment
     }
+    print(current_principal)
 
     tool_registry: ToolRegistry = await build_middleware_tool_registry(current_principal) # currently done once at beginning of execution -> TODO: how will this be affected once multi-user access at same time has to be guaranteed
     registry = tool_registry

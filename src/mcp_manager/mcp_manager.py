@@ -4,16 +4,16 @@ from typing import Any, Dict, List
 from embedding_manager.embedding_backend import StubEmbeddingModel  # or GeminiEmbeddingModel
 from embedding_manager.embedding_manager import EmbeddingManager
 from db.qdrant_store import QdrantVectorStore
-from mcp_manager.data.tool_models import MockBackendServer, ToolRegistry
+from mcp_manager.data.tool_models import MockBackendServer, ToolRegistry, BackendServer
 from mcp_manager.mcp_server_registry import backend_registry
 
 
-def get_mock_mcp_servers(current_principal: Dict[str, Any]) -> List[MockBackendServer]:
+async def get_mcp_servers(current_principal: Dict[str, Any]) -> List[BackendServer]:
     """
     Thin wrapper around BackendRegistry so other code doesn't depend
     on its internal implementation.
     """
-    return backend_registry.get_backends_for_principal(current_principal)
+    return await backend_registry.get_backends_for_principal(current_principal)
 
 
 async def build_middleware_tool_registry(current_principal: dict) -> ToolRegistry:
@@ -28,7 +28,7 @@ async def build_middleware_tool_registry(current_principal: dict) -> ToolRegistr
     registry = ToolRegistry()
 
     # establish connection to the principal-accessible MCP servers
-    backends = get_mock_mcp_servers(current_principal)
+    backends: List[BackendServer] = await get_mcp_servers(current_principal)
 
     # initialize MCP-based embedding manager which establishes connections to the principal-accessible vector DBs
     backends.append(await build_embedding_manager(current_principal))
@@ -43,7 +43,7 @@ async def build_middleware_tool_registry(current_principal: dict) -> ToolRegistr
 
 # TODO where to move this? in embedding_manager.py / here / as standalone class in local_servers
 # FIXME: currently no user authentification - part of task 2.1?
-async def build_embedding_manager(current_principal: dict) -> MockBackendServer:
+async def build_embedding_manager(current_principal: dict) -> BackendServer:
     """
     Creates a new MCP server which deploys the embedding manager, and exposes two tools to the MCP client:
         - injecting data to DB (i.e. upsert_docs)
@@ -60,7 +60,7 @@ async def build_embedding_manager(current_principal: dict) -> MockBackendServer:
 
     em = EmbeddingManager(embedding_model=model, vector_store=store)
 
-    backend = MockBackendServer("document_store")
+    backend = MockBackendServer("document_store")  # TODO: move to backends.json; how about args and factory()?
 
     async def upsert_docs(args: Dict[str, Any]) -> Dict[str, Any]:
         return await em.upsert_documents(
@@ -77,30 +77,32 @@ async def build_embedding_manager(current_principal: dict) -> MockBackendServer:
             k=args.get("k", 5),
         )
 
-    backend.add_tool(
-        name="documents.upsert",
-        description="Index or upsert documents into a semantic corpus.",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "user_id": {"type": "string"},
-                "corpus_id": {"type": "string"},
-                "documents": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id": {"type": "string"},
-                            "text": {"type": "string"},
+    # storing/managing database is admin functionality only
+    if current_principal["user_id"] != "admin":
+        backend.add_tool(
+            name="documents.upsert",
+            description="Index or upsert documents into a semantic corpus.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string"},
+                    "corpus_id": {"type": "string"},
+                    "documents": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {"type": "string"},
+                                "text": {"type": "string"},
+                            },
+                            "required": ["text"],
                         },
-                        "required": ["text"],
                     },
                 },
+                "required": ["user_id", "corpus_id", "documents"],
             },
-            "required": ["user_id", "corpus_id", "documents"],
-        },
-        handler=upsert_docs,
-    )
+            handler=upsert_docs,
+        )
 
     backend.add_tool(
         name="documents.search",

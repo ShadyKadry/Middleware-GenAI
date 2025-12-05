@@ -1,15 +1,15 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Callable
-from pathlib import Path
+import importlib
 import json
 import os
+import pkgutil
+from pathlib import Path
+from typing import Any, Dict, List, Callable
 
-from mcp_manager.data.tool_models import MockBackendServer
-# manual import necessary for the moment
-from mcp_manager.local_servers.hr import build_hr_server
-from mcp_manager.local_servers.jira import build_jira_server
+import mcp_manager.local_servers as local_servers_pkg
+from mcp_manager.data.tool_models import MockBackendServer, MCPConnectionConfig, RemoteBackendServer, BackendServer
 
 BackendFactory = Callable[[], MockBackendServer]
 
@@ -28,6 +28,27 @@ class BackendRegistry:
         )
         self._config: Dict[str, Any] = {"backends": []}
         self._factories: Dict[str, BackendFactory] = {}
+
+        # auto-discover local mock factories once
+        self._auto_register_local_factories()
+
+    # ---------- auto-discovery of local servers ----------
+
+    def _auto_register_local_factories(self) -> None:
+        """
+        Scan mcp_manager.local_servers for modules that define
+        SERVER_KEY + build_backend() and register them automatically.
+        """
+        for module_info in pkgutil.iter_modules(local_servers_pkg.__path__):
+            module_name = module_info.name
+            full_name = f"{local_servers_pkg.__name__}.{module_name}"
+            module = importlib.import_module(full_name)
+
+            key = getattr(module, "SERVER_KEY", None)
+            factory = getattr(module, "build_backend", None)
+
+            if key and callable(factory):
+                self.register_factory(key, factory)
 
     # ---------- factories ----------
 
@@ -67,10 +88,10 @@ class BackendRegistry:
 
     # ---------- main API ----------
 
-    def get_backends_for_principal(
+    async def get_backends_for_principal(
         self,
         principal: Dict[str, Any],
-    ) -> List[MockBackendServer]:
+    ) -> List[BackendServer]:
         """
         Returns MockBackendServer instances the principal is allowed to access,
         based on current in-memory config.
@@ -78,16 +99,16 @@ class BackendRegistry:
         user_id: str = principal.get("user_id", "guest")
         roles: List[str] = principal.get("roles", [])
 
-        result: List[MockBackendServer] = []
+        result: List[BackendServer] = []
 
         for backend_def in self._config.get("backends", []):
             if not backend_def.get("enabled", True):
                 continue
+            kind = backend_def.get("kind", "")
 
             factory_name: str = backend_def.get("factory", "")
             factory = self._factories.get(factory_name)
-            if factory is None:
-                # Unknown factory in config: skip (or log)
+            if factory is None and kind != "remote_mcp":
                 continue
 
             required_roles: List[str] = backend_def.get("required_roles", [])
@@ -96,17 +117,37 @@ class BackendRegistry:
             has_role = not required_roles or any(r in roles for r in required_roles)
             user_allowed = not allowed_users or user_id in allowed_users
 
-            if has_role and user_allowed:
+            if not (has_role and user_allowed):
+                continue
+                # backend = factory()
+                # result.append(backend)
+
+
+            if kind == "local_mcp_mock":
+                factory_name: str = backend_def.get("factory", "")
+                factory = self._factories.get(factory_name)
+                if factory is None:
+                    continue
                 backend = factory()
+                result.append(backend)
+
+            elif kind == "remote_mcp":
+                cfg = MCPConnectionConfig(
+                    name=backend_def["name"],
+                    transport=backend_def.get("transport", "stdio"),
+                    command=backend_def.get("command"),
+                    args=backend_def.get("args", []),
+                    env=backend_def.get("env", {}),
+                    server_url=backend_def.get("server_url"),
+                    headers=backend_def.get("headers", {}),
+                )
+                backend = RemoteBackendServer(server_id=cfg.name, config=cfg)
+                await backend.connect()  # this calls docker + MCP handshake + listTools
                 result.append(backend)
 
         return result
 
 
 # ---------- module-level singleton ----------
-
 backend_registry = BackendRegistry()
 
-# register factories once here – no other code needs to know
-backend_registry.register_factory("hr", build_hr_server)
-backend_registry.register_factory("jira", build_jira_server)
