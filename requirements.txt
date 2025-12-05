@@ -1,4 +1,0 @@
-mcp~=1.21.1
-psycopg[binary]
-fastapi
-httpx
