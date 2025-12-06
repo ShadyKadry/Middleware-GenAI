@@ -3,8 +3,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from embedding_manager.embedding_backend import StubEmbeddingModel  # or GeminiEmbeddingModel
 from embedding_manager.embedding_manager import EmbeddingManager
-from db.qdrant_store import QdrantVectorStore
-
+from db.pgvector_store import PgVectorStore
 
 # ------------------------------
 # Data models
@@ -205,11 +204,12 @@ async def build_embedding_manager() -> MockBackendServer:
     Handles all internal content management.
      """
     # TODO: make {store, model} dynamic based on user
-    store = QdrantVectorStore()
+    store = PgVectorStore()
     model = StubEmbeddingModel(dim=256)
 
-    # 1. Bootstrap demo collection (idempotent: upsert overwrites if exists) TODO: start previous snapshot to reinstate DB state?!
-    await store.bootstrap_demo_corpus(model, collection="demo_corpus")
+    # Optional: previously we bootstrapped a demo corpus in Qdrant.
+    # For pgvector we skip this and let the client index documents via the tool.
+    # await store.bootstrap_demo_corpus(model, collection="demo_corpus")
 
     em = EmbeddingManager(embedding_model=model, vector_store=store)
 
