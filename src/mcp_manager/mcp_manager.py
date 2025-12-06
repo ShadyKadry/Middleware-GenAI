@@ -51,12 +51,16 @@ async def build_embedding_manager(current_principal: dict) -> BackendServer:
 
     Handles all internal content management.
      """
-    # TODO: make {store, model} dynamic based on user/prompt
-    store = QdrantVectorStore()
+
+    # TODO: make {store, model} dynamic based on user
+    store = PgVectorStore()
     model = StubEmbeddingModel(dim=256)
 
     # FOR DEMO PURPOSE ONLY: Bootstrap demo collection (idempotent: upsert overwrites if exists) TODO: start previous snapshot to reinstate DB state?!
     await store.bootstrap_demo_corpus(model, collection="demo_corpus")
+    # Optional: previously we bootstrapped a demo corpus in Qdrant.
+    # For pgvector we skip this and let the client index documents via the tool.
+    # await store.bootstrap_demo_corpus(model, collection="demo_corpus")
 
     em = EmbeddingManager(embedding_model=model, vector_store=store)
 
