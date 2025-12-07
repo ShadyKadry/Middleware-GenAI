@@ -1,193 +1,37 @@
-from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional
+
+from typing import Any, Dict, List
 
 from embedding_manager.embedding_backend import StubEmbeddingModel  # or GeminiEmbeddingModel
 from embedding_manager.embedding_manager import EmbeddingManager
 from db.qdrant_store import QdrantVectorStore
+from mcp_manager.data.tool_models import MockBackendServer, ToolRegistry, BackendServer
+from mcp_manager.mcp_server_registry import backend_registry
 
 
-# ------------------------------
-# Data models
-# ------------------------------
-
-
-@dataclass
-class ToolSchema:
-    """Describes a tool in a simplified, MCP-like way."""
-    name: str
-    description: str
-    input_schema: Dict[str, Any]  # JSON Schema-like
-
-
-@dataclass
-class RegisteredTool:
-    """Tool as seen by the middleware."""
-    id: str  # e.g. "hr.get_policy"
-    server_id: str  # e.g. "hr"
-    schema: ToolSchema
-    handler: Callable[[Dict[str, Any]], Any]
-
-class ToolRegistry:
-    """Keeps track of all tools from all backend servers."""
-
-    def __init__(self) -> None:
-        self._tools: Dict[str, RegisteredTool] = {}
-
-    def register(self, tool: RegisteredTool) -> None:
-        if tool.id in self._tools:
-            raise ValueError(f"Duplicate tool id: {tool.id}")
-        self._tools[tool.id] = tool
-
-    def list_all(self) -> List[RegisteredTool]:
-        return list(self._tools.values())
-
-    def get(self, tool_id: str) -> Optional[RegisteredTool]:
-        return self._tools.get(tool_id)
-
-
-
-# ----------------------------------------------------------------------------------------------------------------------
-# Mock backend servers
-# ----------------------------------------------------------------------------------------------------------------------
-
-# TODO: make it an interface/abstract class. dependency might get circular at some point
-# TODO: this is a mock only and does not represent actual MCP servers. Replace/Implement!
-class MockBackendServer:
+async def get_mcp_servers(current_principal: Dict[str, Any]) -> List[BackendServer]:
     """
-    Simple in-process mock of an MCP server.
-
-    It has:
-    - server_id (e.g. "hr")
-    - tools: mapping from tool_name to (ToolSchema, handler)
+    Thin wrapper around BackendRegistry so other code doesn't depend
+    on its internal implementation.
     """
-
-    def __init__(self, server_id: str) -> None:
-        self.server_id = server_id
-        self.tools: Dict[str, RegisteredTool] = {}
-
-    def add_tool(self, name: str, description: str,
-                 input_schema: Dict[str, Any],
-                 handler: Callable[[Dict[str, Any]], Any]) -> None:
-        fully_qualified_id = f"{self.server_id}.{name}"
-        schema = ToolSchema(name=name,
-                            description=description,
-                            input_schema=input_schema)
-        registered = RegisteredTool(
-            id=fully_qualified_id,
-            server_id=self.server_id,
-            schema=schema,
-            handler=handler,
-        )
-        self.tools[fully_qualified_id] = registered
-
-    def get_tools(self) -> List[RegisteredTool]:
-        return list(self.tools.values())
-
-# ----------------------------------------------------------------------------------------------------------------------
+    return await backend_registry.get_backends_for_principal(current_principal)
 
 
-# TODO: replace with actual MCP servers available to the user (no user logic here yet). Create each as a single class and load based on user?
-def build_mcp_servers() -> List[MockBackendServer]:
+async def build_middleware_tool_registry(current_principal: dict) -> ToolRegistry:
     """
-    Build two simple backend servers with a couple of tools.
-    This simulates "multiple MCP servers" in Phase 1.
+    Connect mock backends and aggregate their tools into a central registry.
+    Builds the tool registry dynamically based on the calling user.
     """
-    # Backend 1: HR server
-    hr = MockBackendServer("hr")
+    # load MCP server registry
+    backend_registry.load_config_from_disk()
 
-    def hr_get_policy(args: Dict[str, Any]) -> Dict[str, Any]:
-        country = args.get("country", "UNKNOWN")
-        # Stubbed text; in reality, you'd call a real MCP server here.
-        return {
-            "country": country,
-            "policy": f"Stubbed vacation policy for {country}.",
-        }
-
-    hr.add_tool(
-        name="get_policy",
-        description="Get HR vacation policy for a country code. Use this tool whenever the user asks about HR vacation policy for any country. Do NOT guess. Always call this tool instead of answering from your own knowledge.",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "country": {
-                    "type": "string",
-                    "description": "ISO country code, e.g. 'DE'.",
-                }
-            },
-            "required": ["country"],
-        },
-        handler=hr_get_policy,
-    )
-
-    # Backend 2: Jira server
-    jira = MockBackendServer("jira")
-
-    def jira_search(args: Dict[str, Any]) -> Dict[str, Any]:
-        query = args.get("query", "")
-        # Stubbed list of tickets
-        return {
-            "query": query,
-            "issues": [
-                {"key": "PROJ-1", "summary": "Stubbed issue 1"},
-                {"key": "PROJ-2", "summary": "Stubbed issue 2"},
-            ],
-        }
-
-    jira.add_tool(
-        name="search_issues",
-        description="Search Jira issues by text query (stubbed).",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "Search query string.",
-                }
-            },
-            "required": ["query"],
-        },
-        handler=jira_search,
-    )
-
-    # Backend 3: purpose server
-    purpose = MockBackendServer("purpose")
-
-    def find_purpose(args: Dict[str, Any]) -> Dict[str, Any]:
-        topic = args.get("topic", "")
-        return {
-            "topic": topic,
-            "purpose": f"The purpose of {topic} is to finish the Fraunhofer AMT project.",
-        }
-
-    purpose.add_tool(
-        name="find_purpose",
-        description="Search for the purpose of of a provided subject/topic.",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "topic": {
-                    "type": "string",
-                    "description": "The topic to find the purpose for.",
-                }
-            },
-            "required": ["topic"],
-        },
-        handler=find_purpose,
-    )
-
-    return [hr, jira, purpose]
-
-
-# TODO - User authentication: this should build the tool registry dynamically based on the calling user
-async def build_middleware_tool_registry() -> ToolRegistry:
-    """
-    Connect mock backends and aggregate their tools into a single registry.
-    """
+    # create empty tool registry
     registry = ToolRegistry()
-    backends = build_mcp_servers()
 
-    # add the document store backend
-    backends.append(await build_embedding_manager())
+    # establish connection to the principal-accessible MCP servers
+    backends: List[BackendServer] = await get_mcp_servers(current_principal)
+
+    # initialize MCP-based embedding manager which establishes connections to the principal-accessible vector DBs
+    backends.append(await build_embedding_manager(current_principal))
 
     for backend in backends:
         for tool in backend.get_tools():
@@ -195,25 +39,28 @@ async def build_middleware_tool_registry() -> ToolRegistry:
 
     return registry
 
+# ----------------------------------------------------------------------------------------------------------------------
 
-async def build_embedding_manager() -> MockBackendServer:
+# TODO where to move this? in embedding_manager.py / here / as standalone class in local_servers
+# FIXME: currently no user authentification - part of task 2.1?
+async def build_embedding_manager(current_principal: dict) -> BackendServer:
     """
     Creates a new MCP server which deploys the embedding manager, and exposes two tools to the MCP client:
-        - injecting data to DB (i.e. index_docs)
+        - injecting data to DB (i.e. upsert_docs)
         - searching within the DB (i.e. search_docs)
 
     Handles all internal content management.
      """
-    # TODO: make {store, model} dynamic based on user
+    # TODO: make {store, model} dynamic based on user/prompt
     store = QdrantVectorStore()
     model = StubEmbeddingModel(dim=256)
 
-    # 1. Bootstrap demo collection (idempotent: upsert overwrites if exists) TODO: start previous snapshot to reinstate DB state?!
+    # FOR DEMO PURPOSE ONLY: Bootstrap demo collection (idempotent: upsert overwrites if exists) TODO: start previous snapshot to reinstate DB state?!
     await store.bootstrap_demo_corpus(model, collection="demo_corpus")
 
     em = EmbeddingManager(embedding_model=model, vector_store=store)
 
-    backend = MockBackendServer("document_store")
+    backend = MockBackendServer("document_store")  # TODO: move to backends.json; how about args and factory()?
 
     async def upsert_docs(args: Dict[str, Any]) -> Dict[str, Any]:
         return await em.upsert_documents(
@@ -230,30 +77,32 @@ async def build_embedding_manager() -> MockBackendServer:
             k=args.get("k", 5),
         )
 
-    backend.add_tool(
-        name="documents.index",
-        description="Index documents into a semantic corpus.",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "user_id": {"type": "string"},
-                "corpus_id": {"type": "string"},
-                "documents": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id": {"type": "string"},
-                            "text": {"type": "string"},
+    # storing/managing database is admin functionality only
+    if current_principal["user_id"] != "admin":
+        backend.add_tool(
+            name="documents.upsert",
+            description="Index or upsert documents into a semantic corpus.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string"},
+                    "corpus_id": {"type": "string"},
+                    "documents": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {"type": "string"},
+                                "text": {"type": "string"},
+                            },
+                            "required": ["text"],
                         },
-                        "required": ["text"],
                     },
                 },
+                "required": ["user_id", "corpus_id", "documents"],
             },
-            "required": ["user_id", "corpus_id", "documents"],
-        },
-        handler=upsert_docs,
-    )
+            handler=upsert_docs,
+        )
 
     backend.add_tool(
         name="documents.search",

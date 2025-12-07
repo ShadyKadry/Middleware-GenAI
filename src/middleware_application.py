@@ -10,6 +10,7 @@ Transport: stdio (JSON-RPC over pipes, as required by MCP clients).
 """
 
 import asyncio
+import os
 from typing import Any
 
 import mcp.server.stdio
@@ -83,7 +84,7 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> dict[str, An
         # turns this into a proper JSON-RPC error for the client.
         raise ValueError(f"Unknown tool: {name}")
 
-    result = tool.handler(arguments)
+    result = await tool.handler(arguments)
 
     # Support both sync and async handlers
     if asyncio.iscoroutine(result):
@@ -109,9 +110,21 @@ async def run() -> None:
     This replaces the old while True / json.loads loop – the SDK
     handles MCP handshake, JSON-RPC, batching, etc.
     """
-    # TODO: obtain only subset of available MCP servers based o authenticated user
+
+    # obtain only subset of available MCP servers based on authenticated user
     global registry  # references the global variable at the beginning of the script
-    tool_registry: ToolRegistry = await build_middleware_tool_registry() # currently done once at beginning of execution -> TODO: make dynamic (by moving to a class object which is instanced?)
+    username = os.getenv("MW_USERNAME", "user_17")
+    roles = os.getenv("MW_ROLE", "user")
+    token = os.getenv("MW_TOKEN")
+
+    current_principal = {
+        "user_id": username,
+        "roles": roles,
+        "token": token,  # not used at the moment
+    }
+    print(current_principal)
+
+    tool_registry: ToolRegistry = await build_middleware_tool_registry(current_principal) # currently done once at beginning of execution -> TODO: how will this be affected once multi-user access at same time has to be guaranteed
     registry = tool_registry
 
     async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
