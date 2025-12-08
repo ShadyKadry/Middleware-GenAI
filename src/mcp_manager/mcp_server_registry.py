@@ -93,11 +93,11 @@ class BackendRegistry:
         principal: Dict[str, Any],
     ) -> List[BackendServer]:
         """
-        Returns MockBackendServer instances the principal is allowed to access,
+        Returns a list of BackendServer instances the principal is allowed to access,
         based on current in-memory config.
         """
         user_id: str = principal.get("user_id", "guest")
-        roles: List[str] = principal.get("roles", [])
+        roles: List[str] = principal.get("role", [])
 
         result: List[BackendServer] = []
 
@@ -119,9 +119,6 @@ class BackendRegistry:
 
             if not (has_role and user_allowed):
                 continue
-                # backend = factory()
-                # result.append(backend)
-
 
             if kind == "local_mcp_mock":
                 factory_name: str = backend_def.get("factory", "")

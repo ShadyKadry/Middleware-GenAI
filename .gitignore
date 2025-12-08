@@ -18,7 +18,7 @@ venv/
 
 # Logs
 *.log
-debug/mcp_pg.log
+debug/*.log
 
 # Editor / IDE
 .idea/
