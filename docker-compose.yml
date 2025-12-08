@@ -1,0 +1,51 @@
+version: "3.9"
+
+services:
+  pgvector:
+    image: ankane/pgvector
+    container_name: pgvector-middleware
+    environment:
+      POSTGRES_USER: middleware_user
+      POSTGRES_PASSWORD: middleware_pwd
+      POSTGRES_DB: middleware_genai
+    ports:
+      - "5434:5432"        # Host 5434 -> Container 5432 (matches DSN)
+    volumes:
+      - pgvector_data:/var/lib/postgresql/data
+      # Init scripts run on first DB init:
+      - ./docker/pgvector-init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U middleware_user -d middleware_genai"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  qdrant:
+    image: qdrant/qdrant
+    container_name: qdrant
+    ports:
+      - "6333:6333"        # REST
+      - "6334:6334"        # gRPC
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # your app (example – adjust as needed)
+  # app:
+  #   build: .
+  #   depends_on:
+  #     pgvector:
+  #       condition: service_healthy
+  #     qdrant:
+  #       condition: service_healthy
+  #   environment:
+  #     PG_DSN: postgresql://middleware_user:middleware_pwd@pgvector:5432/middleware_genai
+  #     QDRANT_URL: http://qdrant:6333
+
+volumes:
+  pgvector_data:
+  qdrant_data:

@@ -119,7 +119,7 @@ async def run() -> None:
 
     current_principal = {
         "user_id": username,
-        "roles": roles,
+        "role": roles,
         "token": token,  # not used at the moment
     }
     print(current_principal)
