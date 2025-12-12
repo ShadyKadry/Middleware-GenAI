@@ -3,6 +3,7 @@ from abc import abstractmethod
 from typing import List, Protocol, Sequence
 
 import numpy as np
+from sentence_transformers import SentenceTransformer
 
 
 # - - - - - - - - - - - - - - - - - - - - - Abstract class - - - - - - - - - - - - - - - - - - - - -
@@ -11,6 +12,7 @@ class EmbeddingModel(Protocol):
     Minimal abstraction over 'something that embeds texts'.
     Extend this for actual embedding model implementations.
     """
+    _dim: int
 
     @property
     @abstractmethod
@@ -71,31 +73,67 @@ class StubEmbeddingModel(EmbeddingModel):
         return out
 
 
-# Google Gemini embedding model - (IGNORED FOR NOW & OUT-COMMENTED IMPL NOT TESTED)
-class GeminiEmbeddingModel(EmbeddingModel):
-    def __init__(self, model_name: str = "text-embedding-004"):
-        # import google.generativeai as genai
-        #
-        # api_key = os.environ["GOOGLE_API_KEY"]
-        # genai.configure(api_key=api_key)
-        # self._client = genai
-        # self._model_name = model_name
-        # # You might hardcode dim or fetch from docs
-        # self._dim = 768  # example; set to actual
-        pass
+# # Google Gemini embedding model - (IGNORED FOR NOW & OUT-COMMENTED IMPL NOT TESTED)
+# class GeminiEmbeddingModel(EmbeddingModel):
+#     def __init__(self, model_name: str = "text-embedding-004"):
+#         # import google.generativeai as genai
+#         #
+#         # api_key = os.environ["GOOGLE_API_KEY"]
+#         # genai.configure(api_key=api_key)
+#         # self._client = genai
+#         # self._model_name = model_name
+#         # # You might hardcode dim or fetch from docs
+#         # self._dim = 768  # example; set to actual
+#         pass
+#
+#     @property
+#     def dim(self) -> int:
+#         # return self._dim
+#         return 0
+#
+#     def embed(self, texts: Sequence[str]) -> List[List[float]]:
+#         # adjust to the exact Gemini SDK API you’re using
+#         # response = self._client.embed_content(
+#         #     model=self._model_name,
+#         #     content=list(texts),
+#         # )
+#         #
+#         # # Example if response.embeddings is a list of embeddings:
+#         # return [emb.values for emb in response.embeddings]
+#         return [[0.0]]
+
+
+class AllMiniLMl6V2EmbeddingModel(EmbeddingModel):
+
+    def __init__(self):
+        self._dim = 384
+        self._embedding_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
 
     @property
     def dim(self) -> int:
-        # return self._dim
-        return 0
+        return self._dim
 
     def embed(self, texts: Sequence[str]) -> List[List[float]]:
-        # adjust to the exact Gemini SDK API you’re using
-        # response = self._client.embed_content(
-        #     model=self._model_name,
-        #     content=list(texts),
-        # )
-        #
-        # # Example if response.embeddings is a list of embeddings:
-        # return [emb.values for emb in response.embeddings]
-        return [[0.0]]
+        return [self._fast_embed(text) for text in texts]
+
+    def _fast_embed(self, text: str) -> List[float]:
+        # encode() returns a numpy array; we convert to a plain list for
+        # easier serialization and storage.
+        return self._embedding_model.encode(text).tolist()
+
+
+
+class AllMpnetBaseV2(EmbeddingModel):
+    def __init__(self):
+        self._dim = 768
+        self._embedding_model = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
+
+    @property
+    def dim(self) -> int:
+        return self._dim
+
+    def embed(self, texts: Sequence[str]) -> List[List[float]]:
+        return [self._quality_embed(text) for text in texts]
+
+    def _quality_embed(self, text: str) -> List[float]:
+        return self._embedding_model.encode(text).tolist()

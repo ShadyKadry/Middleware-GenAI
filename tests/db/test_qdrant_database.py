@@ -3,10 +3,67 @@
 import unittest
 
 from db.qdrant_store import QdrantVectorStore
+from db.vector_store import VectorRecord, VectorStore
 from embedding_manager.embedding_manager import EmbeddingManager
-from embedding_manager.embedding_backend import StubEmbeddingModel
+from embedding_manager.embedding_backend import StubEmbeddingModel, AllMiniLMl6V2EmbeddingModel, AllMpnetBaseV2, \
+    EmbeddingModel
+from typing import List, Dict, Any
 
+async def bootstrap_demo_corpus(
+        embedding_model: EmbeddingModel,
+        vector_store: VectorStore,
+        user="user",
+        collection: str = "demo_corpus",
+) -> None:
+    """
+    Creates a small demo corpus with pre-defined sentences.
+    Is called once during 'middleware_application.py' startup to ingest some data into the Qdrant docker container.
+    The resulting collection will only be available for queries with username: "user".
+    """
+    # dummy data to be stored in the database
+    sentences = [
+        "The Eiffel Tower is located in Paris, France.",
+        "Python is a popular programming language for data science.",
+        "The stock market can be very volatile during economic crises.",
+        "Soccer is the most popular sport in many countries.",
+        "Climate change is affecting weather patterns worldwide.",
+        "Neural networks are a core technique in modern AI.",
+        "Coffee is made from roasted coffee beans.",
+        "The Great Wall of China is visible from certain satellites.",
+        "Quantum computing uses qubits instead of classical bits.",
+        "Mount Everest is the highest mountain above sea level.",
+        "I would like to learn more about RAG.",
+        "I would like to learn less about RAG.",
+        "I would love to learn everything about RAG.",
+        # ... extend this up if you like
+    ]
+    vectors = embedding_model.embed(sentences)
 
+    # ensure collection exists
+    dim = embedding_model.dim
+    await vector_store.get_or_create_collection(collection, dim)
+
+    # create a new database-agnostic data transfer object for each document/text we want to upload
+    records: List[VectorRecord] = []
+    for idx, (sentence, vector) in enumerate(zip(sentences, vectors)):
+        # data to store
+        metadata: Dict[str, Any] = {
+            "text": sentence,
+            "user_id": user,
+        }
+        records.append(
+            VectorRecord(
+                id=str(idx + 1),
+                # needed to create unique point IDs (see upsert_points() above) fixme indexing from 0 is prone to accidental overwrites
+                vector=vector,
+                metadata=metadata,
+            )
+        )
+
+    await vector_store.upsert_records(
+        collection=collection,
+        records=records,
+    )
 """
 IMPORTANT:
     These tests require a running Qdrant instance on port 6333.
@@ -19,8 +76,10 @@ class TestQdrantEmbeddingManager(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         # Same wiring as your debug script
         self.store = QdrantVectorStore()
-        self.model = StubEmbeddingModel(dim=256)
-        self.em = EmbeddingManager(embedding_model=self.model, vector_store=self.store)
+        self.models = {"pipeline_1": StubEmbeddingModel(dim=256),
+                       "text_model_fast": AllMiniLMl6V2EmbeddingModel(),
+                       "text_model_quality": AllMpnetBaseV2()}
+        self.em = EmbeddingManager(embedding_models=self.models, vector_store=self.store)
 
     async def test_search_demo_corpus(self) -> None:
         """
@@ -29,13 +88,15 @@ class TestQdrantEmbeddingManager(unittest.IsolatedAsyncioTestCase):
         - run a semantic search
         - assert we get some reasonable-looking results back
         """
-        corpus_id = "demo_corpus"
-        await self.store.bootstrap_demo_corpus(self.model, collection=corpus_id)
+        corpus_id = "demo_corpus_20251212"
+        embedding_model_id = "text_model_fast"
+        await bootstrap_demo_corpus(embedding_model=self.models[embedding_model_id], vector_store= self.em.vector_store, collection=corpus_id)
 
         query = "I would like to learn more about RAG."  # sentence is present in bootstrapped demo_corpus
         result = await self.em.search_documents(
             user_id="user",
             corpus_id=corpus_id,
+            embedding_model_id=embedding_model_id,
             query=query,
             k=5,
         )

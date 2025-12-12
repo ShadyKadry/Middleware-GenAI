@@ -1,11 +1,12 @@
 # tests/test_vector_databases.py
 
 import unittest
+from typing import List, Dict, Any
 
 from db.pgvector_store import PgVectorStore
+from db.vector_store import VectorRecord
 from embedding_manager.embedding_manager import EmbeddingManager
-from embedding_manager.embedding_backend import StubEmbeddingModel
-
+from embedding_manager.embedding_backend import StubEmbeddingModel, AllMiniLMl6V2EmbeddingModel, AllMpnetBaseV2
 
 """
 IMPORTANT:
@@ -14,12 +15,15 @@ IMPORTANT:
         docker compose up
 """
 
+
 class TestQdrantEmbeddingManager(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         # Same wiring as your debug script
         self.store = PgVectorStore()
-        self.model = StubEmbeddingModel(dim=256)
-        self.em = EmbeddingManager(embedding_model=self.model, vector_store=self.store)
+        self.models = {"pipeline_1": StubEmbeddingModel(dim=256),
+                  "text_model_fast": AllMiniLMl6V2EmbeddingModel(),
+                  "text_model_quality": AllMpnetBaseV2()}
+        self.em = EmbeddingManager(embedding_models=self.models, vector_store=self.store)
 
 
     async def test_upsert_and_search_roundtrip(self) -> None:
@@ -30,6 +34,7 @@ class TestQdrantEmbeddingManager(unittest.IsolatedAsyncioTestCase):
         """
         corpus_id = "test_upsert_corpus"
         user_id = "user_upsert"
+        embedding_model_id = "text_model_fast"
         text = "RAG stands for retrieval augmented generation."
 
         documents = [
@@ -42,6 +47,7 @@ class TestQdrantEmbeddingManager(unittest.IsolatedAsyncioTestCase):
         upsert_result = await self.em.upsert_documents(
             user_id=user_id,
             corpus_id=corpus_id,
+            embedding_model_id=embedding_model_id,
             documents=documents,
         )
 
@@ -53,6 +59,7 @@ class TestQdrantEmbeddingManager(unittest.IsolatedAsyncioTestCase):
         search_result = await self.em.search_documents(
             user_id=user_id,
             corpus_id=corpus_id,
+            embedding_model_id=embedding_model_id,
             query=text,
             k=5,
         )
