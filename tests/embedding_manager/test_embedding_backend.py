@@ -16,6 +16,9 @@ class MyTestCase(unittest.TestCase):
 
     def test_explicit_quality_pipeline(self):
         print("\n=== Test 2: explicit 'text_quality' pipeline ===")
+        self.models = {"pipeline_1": StubEmbeddingModel(dim=256),
+                       "text_model_fast": AllMiniLMl6V2EmbeddingModel(),
+                       "text_model_quality": AllMpnetBaseV2()}
         text = ["This should use the high-quality model."]
         embedding_pipeline_id = "text_model_quality"
 
@@ -25,7 +28,7 @@ class MyTestCase(unittest.TestCase):
         print(f"Text: {text}")
         print(f"Vector length: {len(vec)}")
         print(f"First 5 values: {vec[:5]}")
-        self.assertEqual(len(vec), self.models[embedding_pipeline_id].dim)
+        self.assertEqual(len(vec[0]), self.models[embedding_pipeline_id].dim)
 
     # def test_pipeline_selection():
     #     print("\n=== Test 3: selection logic ===")
