@@ -28,10 +28,10 @@ class EmbeddingManager:
 
     def __init__(
         self,
-        embedding_models: Dict[str, EmbeddingModel],
+        embedding_model: EmbeddingModel,
         vector_store: VectorStore,
     ) -> None:
-        self.embedding_models = embedding_models
+        self.embedding_model = embedding_model
         self.vector_store = vector_store  # the vector DB instance to use
 
     # ------------------------------
@@ -41,7 +41,6 @@ class EmbeddingManager:
         self,
         user_id: str,
         corpus_id: str,
-        embedding_model_id: str,
         documents: Sequence[Dict[str, Any]],
     ) -> Dict[str, Any]:
         """
@@ -49,15 +48,10 @@ class EmbeddingManager:
         """
         # create vector embeddings
         texts = [d["text"] for d in documents]
-
-        # select correct embedding model
-        embedding_model = self.embedding_models[embedding_model_id]
-
-        # embed the documents
-        vectors = embedding_model.embed(texts)
+        vectors = self.embedding_model.embed(texts)
 
         # make sure the collection to save into actually exists
-        dim = embedding_model.dim
+        dim = self.embedding_model.dim
         await self.vector_store.get_or_create_collection(corpus_id, dim)
 
         # create a new database-agnostic data transfer object for each document/text we want to upload
@@ -94,18 +88,12 @@ class EmbeddingManager:
         self,
         user_id: str,
         corpus_id: str,
-        embedding_model_id: str,
         query: str,
         k: int = 5,
     ) -> Dict[str, Any]:
-        # select correct embedding model
-        embedding_model = self.embedding_models[embedding_model_id]
-
-        # create query embedding
-        vectors = embedding_model.embed([query])
-
+        vectors = self.embedding_model.embed([query])
         query_vec = vectors[0]
-        dim = embedding_model.dim
+        dim = self.embedding_model.dim
 
         await self.vector_store.get_or_create_collection(corpus_id, dim)
 
