@@ -3,9 +3,9 @@
 import unittest
 
 from db.pgvector_store import PgVectorStore
+from db.qdrant_store import QdrantVectorStore
 from embedding_manager.embedding_manager import EmbeddingManager
-from embedding_manager.embedding_backend import StubEmbeddingModel
-
+from embedding_manager.embedding_backend import StubEmbeddingModel, GeminiEmbedding001
 
 """
 IMPORTANT:
@@ -17,8 +17,8 @@ IMPORTANT:
 class TestQdrantEmbeddingManager(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         # Same wiring as your debug script
-        self.store = PgVectorStore()
-        self.model = StubEmbeddingModel(dim=256)
+        self.store = QdrantVectorStore()
+        self.model = GeminiEmbedding001()  #StubEmbeddingModel(dim=256)
         self.em = EmbeddingManager(embedding_model=self.model, vector_store=self.store)
 
 

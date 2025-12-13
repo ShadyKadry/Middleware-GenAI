@@ -1,8 +1,20 @@
+from __future__ import annotations
+
 import hashlib
 from abc import abstractmethod
+from dataclasses import dataclass
 from typing import List, Protocol, Sequence
 
 import numpy as np
+
+
+
+import os
+from typing import List, Optional, Sequence
+
+from dotenv import load_dotenv
+from google import genai
+from google.genai import types
 
 
 # - - - - - - - - - - - - - - - - - - - - - Abstract class - - - - - - - - - - - - - - - - - - - - -
@@ -100,3 +112,75 @@ class StubEmbeddingModel(EmbeddingModel):
 #         # # Example if response.embeddings is a list of embeddings:
 #         # return [emb.values for emb in response.embeddings]
 #         return [[0.0]]
+
+
+load_dotenv()  # loads .env into environment
+
+@dataclass
+class GeminiEmbedding001(EmbeddingModel):
+    """
+    Gemini embedding implementation backed by the Google Gen AI SDK.
+
+    Reads API key from environment:
+      GEMINI_API_KEY or GOOGLE_API_KEY
+    """
+    model: str = "gemini-embedding-001"
+    output_dimensionality: Optional[int] = None
+    task_type: Optional[str] = "RETRIEVAL_DOCUMENT"  # embedding pipeline
+    batch_size: int = 100
+    _dim: int = 0
+
+    def __post_init__(self) -> None:
+        api_key = (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"))
+
+        if not api_key:
+            raise RuntimeError("Missing API key. Set GEMINI_API_KEY or GOOGLE_API_KEY in .env")
+
+        self._client = genai.Client(api_key=api_key)
+
+    @property
+    def dim(self) -> int:
+        if self._dim <= 0:
+            vec = self.embed(["_dimension_probe_"])[0]
+            self._dim = len(vec)
+        return self._dim
+
+    def embed(self, texts: Sequence[str]) -> List[List[float]]:
+        if not texts:
+            return []
+
+        out: List[List[float]] = []
+        cfg = (
+            types.EmbedContentConfig(
+                output_dimensionality=self.output_dimensionality,
+                task_type=self.task_type,
+            )
+        )
+
+        for i in range(0, len(texts), self.batch_size):
+            chunk = list(texts[i : i + self.batch_size])
+
+            result = self._client.models.embed_content(
+                model=self.model,
+                contents=chunk,
+                config=cfg,
+            )
+
+            embeddings = getattr(result, "embeddings", None)
+            if embeddings is None:
+                raise RuntimeError("Gemini embed_content returned no embeddings.")
+
+            for e in embeddings:
+                if hasattr(e, "values"):
+                    vec = list(e.values)
+                elif isinstance(e, dict) and "values" in e:
+                    vec = list(e["values"])
+                else:
+                    vec = list(e)
+
+                out.append([float(x) for x in vec])
+
+        if self._dim <= 0 and out:
+            self._dim = len(out[0])
+
+        return out
