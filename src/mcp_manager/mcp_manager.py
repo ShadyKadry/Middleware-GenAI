@@ -82,7 +82,7 @@ async def build_embedding_manager(current_principal: dict) -> BackendServer:
         )
 
     # storing/managing database is admin functionality only
-    if current_principal["role"] == "admin":
+    if current_principal["roles"] == "admin":
         backend.add_tool(
             name="documents.upsert",
             description="Index or upsert documents into a semantic corpus.",

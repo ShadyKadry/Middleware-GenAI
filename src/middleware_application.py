@@ -24,7 +24,7 @@ from mcp_manager.mcp_manager import ToolRegistry, build_middleware_tool_registry
 # Build aggregated registry from your backend "servers"
 # --------------------------------------------------------------------
 import sys
-print("Started middleware application...", file=sys.stderr)
+#print("Started middleware application...", file=sys.stderr)
 
 registry: ToolRegistry | None = None
 
@@ -113,16 +113,16 @@ async def run() -> None:
 
     # obtain only subset of available MCP servers based on authenticated user
     global registry  # references the global variable at the beginning of the script
-    username = os.getenv("MW_USERNAME", "user_17")
-    roles = os.getenv("MW_ROLE", "user")
+    username = os.getenv("MW_USERNAME", "user")
+    roles = os.getenv("MW_ROLES", "admin")
     token = os.getenv("MW_TOKEN")
 
     current_principal = {
         "user_id": username,
-        "role": roles,
+        "roles": roles,
         "token": token,  # not used at the moment
     }
-    print(current_principal)
+    #print(current_principal, file=sys.stderr)
 
     tool_registry: ToolRegistry = await build_middleware_tool_registry(current_principal) # currently done once at beginning of execution -> TODO: how will this be affected once multi-user access at same time has to be guaranteed
     registry = tool_registry

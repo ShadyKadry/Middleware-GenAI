@@ -175,10 +175,13 @@ class PgVectorStore(VectorStore):
                 rows = cur.fetchall()
 
         for row in rows:
+            distance = float(row["distance"])  # l2 distance, lower is better
+            similarity_score = 1.0 / (1.0 + distance)  # higher is better -> range [0..1]
+
             results.append(
                 SearchResult(
                     id=row["id"],
-                    score=float(row["distance"]),
+                    score=similarity_score,
                     metadata=row["metadata"],
                 )
             )

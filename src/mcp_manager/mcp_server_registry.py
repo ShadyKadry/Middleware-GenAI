@@ -97,7 +97,7 @@ class BackendRegistry:
         based on current in-memory config.
         """
         user_id: str = principal.get("user_id", "guest")
-        roles: List[str] = principal.get("role", [])
+        roles: List[str] = principal.get("roles", [])
 
         result: List[BackendServer] = []
 
