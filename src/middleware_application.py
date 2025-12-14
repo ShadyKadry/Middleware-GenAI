@@ -59,8 +59,6 @@ async def handle_list_tools() -> list[types.Tool]:
                 name=t.id,
                 description=t.schema.description or "",
                 inputSchema=input_schema,
-                # If you have output schemas in your ToolRegistry,
-                # you can add: outputSchema=t.schema.output_schema
             )
         )
 
@@ -90,11 +88,7 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> dict[str, An
     if asyncio.iscoroutine(result):
         result = await result
 
-    # Low-level server expects a dict; it will validate it against
-    # outputSchema if one was provided in listTools (optional).
     if not isinstance(result, dict):
-        # If your tools return arbitrary JSON, you can relax this:
-        # return {"result": result}
         return {"result": result}
 
     return result
@@ -107,8 +101,7 @@ async def run() -> None:
     """
     Run the MCP server over stdio.
 
-    This replaces the old while True / json.loads loop – the SDK
-    handles MCP handshake, JSON-RPC, batching, etc.
+    The SDK handles MCP handshake, JSON-RPC, batching, etc.
     """
 
     # obtain only subset of available MCP servers based on authenticated user

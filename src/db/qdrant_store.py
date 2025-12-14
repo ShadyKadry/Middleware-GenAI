@@ -222,47 +222,47 @@ class QdrantVectorStore(VectorStore):
             "Conservation funding supported long-term monitoring efforts.",
             "The study was published in a wildlife journal.",
 
-            "A novelist outlined the plot of a mystery thriller.",
-            "The story takes place in a remote coastal town.",
-            "A missing person case drives the central conflict.",
-            "Clues are hidden in seemingly ordinary conversations.",
-            "The final chapter reveals an unexpected connection.",
-
-            "A fitness app released an update improving activity tracking accuracy.",
-            "Users reported fewer GPS dropouts during outdoor runs.",
-            "Battery consumption decreased after the update.",
-            "The development team optimized background processes.",
-            "App store ratings increased following the release.",
-
-            "A teacher prepared lesson plans for the upcoming semester.",
-            "The curriculum includes project-based learning activities.",
-            "Students will collaborate in small groups.",
-            "Assessment methods emphasize critical thinking skills.",
-            "The school approved additional classroom resources.",
-
-            "A space telescope detected unusual fluctuations in starlight.",
-            "Astronomers suspected the presence of an exoplanet.",
-            "Follow-up observations confirmed a periodic transit pattern.",
-            "The planet orbits its star every twelve days.",
-            "Findings were shared at an international astronomy conference.",
-
-            "A supply chain disruption delayed electronic component shipments.",
-            "Manufacturers adjusted production schedules accordingly.",
-            "Alternative suppliers were evaluated for reliability.",
-            "Logistics costs increased due to expedited shipping.",
-            "Normal operations resumed after two weeks.",
-
-            "A journalist interviewed residents after the flood.",
-            "Many homes suffered water damage from the rising river.",
-            "Emergency crews distributed food and clean water.",
-            "Recovery efforts focused on infrastructure repair.",
-            "The article highlighted community resilience.",
-
-            "A data scientist trained a model on anonymized user data.",
-            "Feature selection improved prediction accuracy.",
-            "Cross-validation reduced the risk of overfitting.",
-            "The model was deployed behind an internal API.",
-            "Performance metrics were monitored in real time."
+            # "A novelist outlined the plot of a mystery thriller.",
+            # "The story takes place in a remote coastal town.",
+            # "A missing person case drives the central conflict.",
+            # "Clues are hidden in seemingly ordinary conversations.",
+            # "The final chapter reveals an unexpected connection.",
+            #
+            # "A fitness app released an update improving activity tracking accuracy.",
+            # "Users reported fewer GPS dropouts during outdoor runs.",
+            # "Battery consumption decreased after the update.",
+            # "The development team optimized background processes.",
+            # "App store ratings increased following the release.",
+            #
+            # "A teacher prepared lesson plans for the upcoming semester.",
+            # "The curriculum includes project-based learning activities.",
+            # "Students will collaborate in small groups.",
+            # "Assessment methods emphasize critical thinking skills.",
+            # "The school approved additional classroom resources.",
+            #
+            # "A space telescope detected unusual fluctuations in starlight.",
+            # "Astronomers suspected the presence of an exoplanet.",
+            # "Follow-up observations confirmed a periodic transit pattern.",
+            # "The planet orbits its star every twelve days.",
+            # "Findings were shared at an international astronomy conference.",
+            #
+            # "A supply chain disruption delayed electronic component shipments.",
+            # "Manufacturers adjusted production schedules accordingly.",
+            # "Alternative suppliers were evaluated for reliability.",
+            # "Logistics costs increased due to expedited shipping.",
+            # "Normal operations resumed after two weeks.",
+            #
+            # "A journalist interviewed residents after the flood.",
+            # "Many homes suffered water damage from the rising river.",
+            # "Emergency crews distributed food and clean water.",
+            # "Recovery efforts focused on infrastructure repair.",
+            # "The article highlighted community resilience.",
+            #
+            # "A data scientist trained a model on anonymized user data.",
+            # "Feature selection improved prediction accuracy.",
+            # "Cross-validation reduced the risk of overfitting.",
+            # "The model was deployed behind an internal API.",
+            # "Performance metrics were monitored in real time."
         ]
         vectors = await get_or_create_embeddings(sentences=sentences, embedding_model=embedding_model, name=embedding_model.name)
 
