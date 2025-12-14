@@ -1,5 +1,8 @@
 import uuid
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
+
+import numpy as np
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import (
     Distance,
@@ -10,6 +13,8 @@ from qdrant_client.models import (
 
 from db.vector_store import SearchResult, VectorRecord, VectorStore, UpsertResult
 from qdrant_client.models import FieldCondition, MatchValue
+
+from embedding_manager.embedding_backend import EmbeddingModel
 
 
 # create Qdrant specific access filter
@@ -259,7 +264,7 @@ class QdrantVectorStore(VectorStore):
             "The model was deployed behind an internal API.",
             "Performance metrics were monitored in real time."
         ]
-        vectors = embedding_model.embed(sentences)
+        vectors = await get_or_create_embeddings(sentences=sentences, embedding_model=embedding_model, name=embedding_model.name)
 
         # ensure collection exists
         dim = embedding_model.dim
@@ -285,3 +290,28 @@ class QdrantVectorStore(VectorStore):
             collection=collection,
             records=records,
         )
+
+
+async def get_or_create_embeddings(sentences: List[str], embedding_model: EmbeddingModel ,name: str) -> List[List[float]]:
+    """
+    Load cached embeddings if they exist, otherwise compute and save them.
+    """
+    # out_path = Path("demo_utils")
+    BASE_DIR = Path(__file__).resolve().parent
+    out_path = BASE_DIR / "demo_utils"
+    out_path.mkdir(parents=True, exist_ok=True)
+
+    file_path = out_path / f"embeddings_{name}.npy"
+
+    # ----- load artifact if it already exists -----
+    if file_path.exists():
+        return np.load(file_path).tolist()
+
+    # ----- create artifact -----
+    vectors: List[List[float]] = embedding_model.embed(sentences)
+
+    arr = np.asarray(vectors, dtype=np.float32)
+    np.save(file_path, arr)
+
+    return vectors
+

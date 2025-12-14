@@ -55,10 +55,12 @@ async def build_embedding_manager(current_principal: dict) -> BackendServer:
 
     # TODO: make {store, model} dynamic based on user
     store = QdrantVectorStore()
-    model = GeminiEmbedding001()  #StubEmbeddingModel(dim=256)
+    model = StubEmbeddingModel(dim=256)  #GeminiEmbedding001()  #
 
     # FOR DEMO PURPOSE ONLY: Bootstrap demo collection (idempotent: upsert overwrites if exists) TODO: start previous snapshot to reinstate DB state?!
-    await store.bootstrap_demo_corpus(model, collection="demo_corpus")
+    from datetime import datetime
+    dt_str = datetime.now().strftime("%Y%m%d_%H%M")
+    await store.bootstrap_demo_corpus(model, collection=f"demo_corpus_{dt_str}")
     # Optional: previously we bootstrapped a demo corpus in Qdrant.
     # For pgvector we skip this and let the client index documents via the tool.
     # await store.bootstrap_demo_corpus(model, collection="demo_corpus")
