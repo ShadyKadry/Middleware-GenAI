@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>App</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="bar">
+    <h2>Welcome, {{ user }}! </h2>
+    <button id="logoutBtn">Log out</button>
+  </div>
+
+  <div class="card">
+    <p>You are logged in.</p>
+    <pre id="meBox"></pre>
+  </div>
+
+  <div class="card">
+    <h3>Chat</h3>
+
+    <div_toggle id="chatLog" style="white-space: pre-wrap; margin-bottom: 12px;"></div_toggle>
+
+    <form id="chatForm">
+      <input id="chatInput" name="message" placeholder="Type a message..." required />
+      <button type="submit">Send</button>
+    </form>
+
+    <div id="chatLog" style="white-space: pre-wrap; margin-top: 12px;"></div>
+    <div id="chatErr" class="err"></div>
+  </div>
+
+  <div class="card">
+    <h3>Available Tools</h3>
+    <div id="toolsStatus">Loading...</div>
+    <ul id="toolsList"></ul>
+  </div>
+
+  <script src="/static/app.js"></script>
+
+</body>
+</html>
