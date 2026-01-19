@@ -1,21 +1,17 @@
 import secrets
-from asyncio.subprocess import Process
 from pathlib import Path
-from typing import List, Any, Dict
+from typing import List, Any, Dict, Optional
 
-import httpx
 from fastapi import FastAPI, Request, Form, HTTPException
 from fastapi.responses import RedirectResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from mcp import ClientSession, StdioServerParameters, stdio_client
-from passlib.context import CryptContext
+from fastapi.templating import Jinja2Templates
+from google.genai.types import Tool
 from itsdangerous import URLSafeSerializer, BadSignature
-import os
+from passlib.context import CryptContext
 from pydantic import BaseModel
 
 from ..app.mcp_client import MCPClient
-from components.gateway.app.mcp_process import McpProcess
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -127,24 +123,59 @@ def app_page(request: Request):
 
 class ChatIn(BaseModel):
     message: str
+    selected_tools: Optional[List[str]] = None
+    chat_session_id: Optional[str] = None
+
+
+def filter_tools(all_tools, allowed_names: set[str]):
+    filtered = []
+    for tool in all_tools:
+        fds = getattr(tool, "function_declarations", None) or []
+        # keep only declarations whose name is allowed
+        kept = [fd for fd in fds if fd.name in allowed_names]
+        if kept:
+            # rebuild Tool with only kept declarations
+            filtered.append(Tool(function_declarations=kept))
+    return filtered
+
 
 @app.post("/api/chat")
-def api_chat(payload: ChatIn, request: Request):
+async def api_chat(payload: ChatIn, request: Request):
     session = get_session_user(request)
+    print(f"Session: {session}")
     if not session:
         raise HTTPException(status_code=401, detail="Not logged in")
 
     msg = payload.message.strip()
     if not msg:
         raise HTTPException(status_code=400, detail="Empty message")
+    #print(CHAT_SESSIONS[payload.chat_session_id])
+    mcp_client = CHAT_SESSIONS[payload.chat_session_id].get("mcp")
+    if not mcp_client:
+        raise HTTPException(status_code=400, detail="Chat not bootstrapped")
 
-    # Gemini 2.5 Flash model id (as used by providers/docs)
-    client = CHAT_SESSIONS[session].get("mcp")
-    resp = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=msg,
-    )
-    return {"text": "That's where the answer will be displayed. Coming soon." or resp.text}
+    # tools from bootstrap (your MCP->Gemini converted Tool objects)
+    all_tools = getattr(mcp_client, "function_declarations", None) or []
+
+    selected = payload.selected_tools or []
+    if selected:
+        allowed = set(selected)
+        tools_for_model = filter_tools(all_tools, allowed)
+
+        tool_names = [tool.function_declarations[0].name for tool in tools_for_model]
+        print(tool_names)
+    else:
+        tool_names = []
+    print("Total available tools: ", len(tool_names))
+
+    # resp = mcp_client.models.generate_content(
+    #     model="gemini-2.5-flash",
+    #     contents=msg,
+    #     config=types.GenerateContentConfig(tools=tools_for_model),
+    # )
+
+    return {"text": "placeholder"} # resp.text}
+
 
 class ToolUI(BaseModel):
     name: str
@@ -167,9 +198,6 @@ async def chat_bootstrap(request: Request):
 
     chat_session_id = secrets.token_urlsafe(16)
 
-    # start per-session MCP process
-    # mcp_proc = await McpProcess.start(username=username, role=role)
-
     client = MCPClient(user_id=username, role=role)
     await client.connect_to_server()
 
@@ -182,7 +210,6 @@ async def chat_bootstrap(request: Request):
         "tools": tools,
     }
 
-    #tools_ui = [{"name": t["name"], "description": t.get("description","")} for t in tools]
     tools_ui = []
     for tool in tools:  # tools is List[Tool]
         for fd in (tool.function_declarations or []):
@@ -191,58 +218,3 @@ async def chat_bootstrap(request: Request):
                 "description": getattr(fd, "description", "") or ""
             })
     return {"chat_session_id": chat_session_id, "tools_ui": tools_ui}
-
-# @app.post("/api/chat/bootstrap", response_model=BootstrapOut)
-# def chat_bootstrap(request: Request):
-#     sess = get_session_user(request)
-#     if not sess:
-#         raise HTTPException(status_code=401, detail="Not logged in")
-#
-#     username = sess["user"]
-#     role = sess.get("role", "user")
-#
-#     # 1) handshake / list tools from MCP
-#     tools = mcp_rpc("list_tools", {"username": username, "role": role})
-#
-#     # Expecting tools to be a list of {name, description, inputSchema, ...}
-#     if not isinstance(tools, list):
-#         raise HTTPException(status_code=502, detail="MCP list_tools returned unexpected shape")
-#
-#     # 2) create chat session and store full tool schemas
-#     chat_session_id = secrets.token_urlsafe(16)
-#
-#     CHAT_SESSIONS[chat_session_id] = {
-#         "user": username,
-#         "role": role,
-#         "tools": tools,  # full MCP tool definitions (schemas)
-#         "enabled_tools": [t.get("name") for t in tools if isinstance(t, dict) and t.get("name")],
-#     }
-#
-#     tools_ui = [
-#         ToolUI(name=t.get("name", "unnamed"), description=t.get("description", "") or "")
-#         for t in tools
-#         if isinstance(t, dict)
-#     ]
-#
-#     return BootstrapOut(chat_session_id=chat_session_id, tools_ui=tools_ui)
-
-# def mcp_rpc(method: str, params: dict) -> Any:
-#     payload = {
-#         "jsonrpc": "2.0",
-#         "id": secrets.token_hex(8),
-#         "method": method,
-#         "params": params,
-#     }
-#     try:
-#         r = httpx.post(MCP_RPC_URL, json=payload, timeout=15.0)
-#         r.raise_for_status()
-#         data = r.json()
-#     except Exception as e:
-#         raise HTTPException(status_code=502, detail=f"MCP request failed: {e}")
-#
-#     if "error" in data:
-#         raise HTTPException(status_code=502, detail=f"MCP error: {data['error']}")
-#     return data.get("result")
-
-
-#python middleware.py --user arno --role admin

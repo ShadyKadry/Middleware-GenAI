@@ -73,7 +73,6 @@ class MCPClient:
         )
 
         final_text = []
-        assistant_message_content = []
 
         for candidate in response.candidates:
             if candidate.content.parts:
@@ -142,8 +141,6 @@ class MCPClient:
         await self.exit_stack.aclose()
 
 
-
-
 def clean_schema(obj):
     # Recurse lists
     if isinstance(obj, list):
@@ -160,7 +157,6 @@ def clean_schema(obj):
 
     # Primitives
     return obj
-
 
 
 def convert_mcp_tools_to_gemini(tools) -> list:

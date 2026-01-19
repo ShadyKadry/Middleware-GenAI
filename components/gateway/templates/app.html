@@ -19,21 +19,32 @@
   <div class="card">
     <h3>Chat</h3>
 
-    <div_toggle id="chatLog" style="white-space: pre-wrap; margin-bottom: 12px;"></div_toggle>
+    <div id="chatLog" style="white-space: pre-wrap; margin-bottom: 12px;"></div>
 
     <form id="chatForm">
       <input id="chatInput" name="message" placeholder="Type a message..." required />
       <button type="submit">Send</button>
     </form>
 
-    <div id="chatLog" style="white-space: pre-wrap; margin-top: 12px;"></div>
     <div id="chatErr" class="err"></div>
   </div>
 
   <div class="card">
     <h3>Available Tools</h3>
-    <div id="toolsStatus">Loading...</div>
-    <ul id="toolsList"></ul>
+
+    <div class="tools-bar">
+      <div id="toolsStatus">Loading...</div>
+      <div class="tools-actions">
+        <button type="button" id="toolsSelectAllBtn">Select all</button>
+        <button type="button" id="toolsSelectNoneBtn">Select none</button>
+      </div>
+    </div>
+
+    <div class="tools-sub">
+      Enabled: <span id="toolsEnabledCount">0</span>
+    </div>
+
+    <ul id="toolsList" class="tools-list"></ul>
   </div>
 
   <script src="/static/app.js"></script>
