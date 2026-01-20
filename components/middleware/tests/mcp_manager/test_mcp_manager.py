@@ -19,8 +19,8 @@ class TestMCPManager(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         # create authenticating principal
         self.principal = {
-        "user_id": "test_user_1",
-        "roles": "tester",
+        "user_id": "user", #"test_user_1",
+        "role": "admin",
         "token": "1234",
         }
 

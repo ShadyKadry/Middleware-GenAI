@@ -32,7 +32,7 @@
       "enabled": true
     },
     {
-      "name": "wikipedia-mcp",
+      "name": "wikipedia_mcp",
       "kind": "remote_mcp",
       "transport": "stdio",
       "command": "docker",

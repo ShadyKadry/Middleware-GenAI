@@ -26,7 +26,7 @@ if (logoutBtn) {
   });
 }
 
-// ---- tool selection state (persisted) ----
+// ---- tool selection state ---- TODO persisted, but only in memory not in DB
 const TOOLS_STORAGE_KEY = "enabled_tools_v1";
 let selectedTools = new Set();
 
@@ -115,17 +115,13 @@ async function bootstrap() {
     }
 
     const data = await res.json();
-    print(data)
     CHAT_SESSION_ID = data.chat_session_id;
 
-    // If nothing selected yet, default to "all selected"
+    // if nothing selected yet, default to "all selected"
     if (selectedTools.size === 0 && Array.isArray(data.tools_ui)) {
       const allowed = new Set(data.tools_ui.map(t => t.name));
       selectedTools = new Set([...selectedTools].filter(n => allowed.has(n)));
       saveSelectedTools();
-
-      // for (const t of data.tools_ui) selectedTools.add(t.name);
-      // saveSelectedTools();
     }
 
     if (toolsStatus) toolsStatus.textContent = `Loaded ${data.tools_ui.length} tool(s).`;
@@ -177,8 +173,8 @@ if (chatForm) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         message,
-        selected_tools: [...selectedTools], // <--- NEW
-        chat_session_id: CHAT_SESSION_ID,   // optional if your backend uses it
+        selected_tools: [...selectedTools],
+        chat_session_id: CHAT_SESSION_ID,
       }),
     });
 

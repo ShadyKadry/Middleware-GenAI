@@ -1,29 +1,29 @@
+import logging
 import os
 import sys
 from contextlib import AsyncExitStack
 from pathlib import Path
 from typing import Optional
 
+from dotenv import load_dotenv
+from google import genai
 from google.genai import types
 from google.genai.types import Tool, FunctionDeclaration
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-UNSUPPORTED_JSON_SCHEMA_KEYS = {
+#logger = logging.getLogger(__name__)
+
+UNSUPPORTED_JSON_SCHEMA_KEYS_FOR_GEMINI = {
     "$schema",
-    "$id",
-    "id",
-    "title",
-    "description",
-    "definitions",
-    "$defs",
+    "additionalProperties",
 }
 
 # todo split into 2 parts: e.g. MiddlewareSession & GeminiOrchestrator ?
 class MCPClient:
 
     def __init__(self, user_id:str, role:str):
-        self.model_name = "gemini-2.5-flash"  # change if more are supported at one point
+        self.model_name = "gemini-2.5-flash"  # change if more are supported at one point or different models of gemini are selectable
         self.user_id = user_id
         self.role = role
         self.session: Optional[ClientSession] = None
@@ -32,12 +32,12 @@ class MCPClient:
         components_dir = Path(__file__).resolve().parent.parent.parent
         self.middleware_script = components_dir / "middleware" / "src" / "middleware_application.py"
 
+        load_dotenv()
         gemini_api_key = os.getenv("GEMINI_API_KEY")
         if not gemini_api_key:
-            print("Missing GEMINI_API_KEY environment variable")
-            #raise ValueError("Missing GEMINI_API_KEY environment variable")
+            raise ValueError("Missing GEMINI_API_KEY in environment variable.")
 
-        self.genai_client = None #genai.Client(api_key=gemini_api_key)
+        self.genai_client = genai.Client(api_key=gemini_api_key)
         self.function_declarations = []
 
 
@@ -61,7 +61,7 @@ class MCPClient:
 
         self.function_declarations = convert_mcp_tools_to_gemini(tools)
 
-    async def process_query(self, query: str):
+    async def process_query(self, query: str, enabled_tools: list):
         user_prompt_content = types.Content(
             role="user",
             parts=[types.Part.from_text(text=query)]
@@ -69,7 +69,7 @@ class MCPClient:
         response = self.genai_client.models.generate_content(
             model=self.model_name,
             contents=[user_prompt_content],
-            config=types.GenerateContentConfig(tools=self.function_declarations)
+            config=types.GenerateContentConfig(tools=enabled_tools)
         )
 
         final_text = []
@@ -83,23 +83,22 @@ class MCPClient:
                             tool_name = function_call_part.function_call.name
                             tool_args = function_call_part.function_call.args
 
-                            # Print debug info: Which tool is being called and with what arguments
-                            print(f"\n[Gemini requested tool call: {tool_name} with args {tool_args}]")
+                            #logger.info(f"\n[Gemini requested tool call: {tool_name} with args {tool_args}]")
 
-                            # Execute the tool using the MCP server
+                            # execute the tool using the MCP server
                             try:
                                 result = await self.session.call_tool(tool_name, tool_args)
                                 function_response = {"result": result.content}
                             except Exception as e:
                                 function_response = {"error": str(e)}
 
-                            # Format the tool response for Gemini in a way it understands
+                            # format the tool response for Gemini in a way it understands
                             function_response_part = types.Part.from_function_response(
                                 name=tool_name,
                                 response=function_response
                             )
 
-                            # Structure the tool response as a Content object for Gemini
+                            # structure the tool response as a Content object for Gemini
                             function_response_content = types.Content(
                                 role="tool",
                                 parts=[function_response_part]
@@ -113,28 +112,18 @@ class MCPClient:
                                     function_response_content,
                                 ],
                                 config=types.GenerateContentConfig(
-                                    tools=self.function_declarations,
+                                    tools=enabled_tools,
                                 ),
                             )
 
-                            # Extract final response text from Gemini after processing the tool call
+                            # extract final response text from Gemini after processing the tool call
                             final_text.append(response.candidates[0].content.parts[0].text)
                         else:
-                            # If no function call was requested, simply add Gemini's text response
+                            # if no function call was requested, simply add Gemini's text response
                             final_text.append(part.text)
 
-        # Return the combined response as a single formatted string
+        # return the combined response as a single formatted string
         return "\n".join(final_text)
-
-    async def chat_loop(self):
-        while True:
-            query = input("\nQuery: ").strip()
-            if query.lower() == 'quit':
-                break
-
-            # Process the user's query and display the response
-            response = await self.process_query(query)
-            print("\n" + response)
 
     async def cleanup(self):
         """Clean up resources before exiting."""
@@ -142,20 +131,20 @@ class MCPClient:
 
 
 def clean_schema(obj):
-    # Recurse lists
+    # recursively clean lists
     if isinstance(obj, list):
         return [clean_schema(x) for x in obj]
 
-    # Recurse dicts
+    # recursively clean dicts
     if isinstance(obj, dict):
         cleaned = {}
         for k, v in obj.items():
-            if k in UNSUPPORTED_JSON_SCHEMA_KEYS:
+            if k in UNSUPPORTED_JSON_SCHEMA_KEYS_FOR_GEMINI:
                 continue
             cleaned[k] = clean_schema(v)
         return cleaned
 
-    # Primitives
+    # primitives
     return obj
 
 
@@ -163,7 +152,6 @@ def convert_mcp_tools_to_gemini(tools) -> list:
     gemini_tools = []
     for tool in tools:
         parameters = clean_schema(tool.inputSchema)
-        print(parameters)
         function_declaration = FunctionDeclaration(
             name=tool.name,
             description=tool.description,
@@ -171,5 +159,6 @@ def convert_mcp_tools_to_gemini(tools) -> list:
         )
         gemini_tool = Tool(function_declarations=[function_declaration])
         gemini_tools.append(gemini_tool)
+    #logger.debug(f"Converted {len(gemini_tools)} tools to Gemini function declarations.")
 
     return gemini_tools

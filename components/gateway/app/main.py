@@ -1,4 +1,6 @@
+import logging
 import secrets
+import sys
 from pathlib import Path
 from typing import List, Any, Dict, Optional
 
@@ -13,18 +15,24 @@ from pydantic import BaseModel
 
 from ..app.mcp_client import MCPClient
 
+# gateway project root
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-app = FastAPI()
+# create logger
+# logging.basicConfig(
+#     level=logging.INFO,
+#     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+#     handlers=[
+#         logging.StreamHandler(sys.stderr),  # <-- critical for STDIO MCP
+#     ],
+#     force=True,
+# )
+# logger = logging.getLogger(__name__)
 
-templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
-app.mount(
-    "/static",
-    StaticFiles(directory=BASE_DIR / "static"),
-    name="static",
-)
-# --- config ---
+###############################################
+### ---> Login related functionality/data   ### TODO
+###############################################
 SECRET_KEY = "dev-change-me"
 COOKIE_NAME = "session"
 
@@ -47,8 +55,37 @@ ROLES = {
     "bach": "user"
 }
 
-# todo: where should ongoing sessions be saved?
+# todo: where should ongoing sessions be saved? DB? in code is suboptimal security-wise...
 CHAT_SESSIONS: Dict[str, Dict[str, Any]] = {}
+
+#######################################
+### ---> Helper classes & functions ###
+#######################################
+
+class ToolUI(BaseModel):
+    name: str
+    description: str = ""
+
+class BootstrapOut(BaseModel):
+    chat_session_id: str
+    tools_ui: List[ToolUI]
+
+class ChatIn(BaseModel):
+    message: str
+    selected_tools: Optional[List[str]] = None
+    chat_session_id: Optional[str] = None
+
+
+def filter_tools(all_tools, allowed_names: set[str]):
+    filtered = []
+    for tool in all_tools:
+        fds = getattr(tool, "function_declarations", None) or []
+        # keep only declarations whose name is allowed
+        kept = [fd for fd in fds if fd.name in allowed_names]
+        if kept:
+            # rebuild Tool with only kept declarations
+            filtered.append(Tool(function_declarations=kept))
+    return filtered
 
 
 def get_session_user(request: Request):
@@ -60,6 +97,19 @@ def get_session_user(request: Request):
     except BadSignature:
         return None
 
+
+#######################################
+### ---> The actual application     ###
+#######################################
+app = FastAPI()
+
+app.mount(
+    "/static",
+    StaticFiles(directory=BASE_DIR / "static"),
+    name="static",
+)
+
+templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 @app.get("/")
 def login_page(request: Request):
@@ -120,41 +170,25 @@ def app_page(request: Request):
         },
     )
 
-
-class ChatIn(BaseModel):
-    message: str
-    selected_tools: Optional[List[str]] = None
-    chat_session_id: Optional[str] = None
-
-
-def filter_tools(all_tools, allowed_names: set[str]):
-    filtered = []
-    for tool in all_tools:
-        fds = getattr(tool, "function_declarations", None) or []
-        # keep only declarations whose name is allowed
-        kept = [fd for fd in fds if fd.name in allowed_names]
-        if kept:
-            # rebuild Tool with only kept declarations
-            filtered.append(Tool(function_declarations=kept))
-    return filtered
-
-
 @app.post("/api/chat")
 async def api_chat(payload: ChatIn, request: Request):
-    session = get_session_user(request)
-    print(f"Session: {session}")
-    if not session:
+    #logger.debug(f"Starts processing request with {payload.selected_tools} tools enabled/selected.")
+    user_credentials = get_session_user(request)
+    #logger.debug(f"Credentials of requester: {user_credentials}")
+    #logger.debug(f"Session key: {CHAT_SESSIONS[payload.chat_session_id]}")
+
+    if not user_credentials:
         raise HTTPException(status_code=401, detail="Not logged in")
 
     msg = payload.message.strip()
     if not msg:
         raise HTTPException(status_code=400, detail="Empty message")
-    #print(CHAT_SESSIONS[payload.chat_session_id])
+
     mcp_client = CHAT_SESSIONS[payload.chat_session_id].get("mcp")
     if not mcp_client:
         raise HTTPException(status_code=400, detail="Chat not bootstrapped")
 
-    # tools from bootstrap (your MCP->Gemini converted Tool objects)
+    # tools from bootstrap (MCP->Gemini converted Tool objects)
     all_tools = getattr(mcp_client, "function_declarations", None) or []
 
     selected = payload.selected_tools or []
@@ -163,28 +197,13 @@ async def api_chat(payload: ChatIn, request: Request):
         tools_for_model = filter_tools(all_tools, allowed)
 
         tool_names = [tool.function_declarations[0].name for tool in tools_for_model]
-        print(tool_names)
+        #logger.debug(f"Available MCP tools are: {tool_names}")
     else:
-        tool_names = []
-    print("Total available tools: ", len(tool_names))
+        tool_names, tools_for_model = [], []
 
-    # resp = mcp_client.models.generate_content(
-    #     model="gemini-2.5-flash",
-    #     contents=msg,
-    #     config=types.GenerateContentConfig(tools=tools_for_model),
-    # )
+    text = await mcp_client.process_query(query=msg, enabled_tools=tools_for_model)
 
-    return {"text": "placeholder"} # resp.text}
-
-
-class ToolUI(BaseModel):
-    name: str
-    description: str = ""
-
-class BootstrapOut(BaseModel):
-    chat_session_id: str
-    tools_ui: List[ToolUI]
-
+    return {"text": text}
 
 
 @app.post("/api/chat/bootstrap")

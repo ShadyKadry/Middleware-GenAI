@@ -11,6 +11,7 @@ Transport: stdio (JSON-RPC over pipes, as required by MCP clients).
 
 import argparse
 import asyncio
+import logging
 from typing import Any
 
 import mcp.server.stdio
@@ -20,11 +21,13 @@ from mcp.server.models import InitializationOptions
 
 from mcp_manager.mcp_manager import ToolRegistry, build_middleware_tool_registry
 
+#logger = logging.getLogger(__name__)
+
 # --------------------------------------------------------------------
 # Build aggregated registry from your backend "servers"
 # --------------------------------------------------------------------
 import sys
-print("Started middleware application...", file=sys.stderr)
+#logger.info("Started middleware application...")
 
 registry: ToolRegistry | None = None
 
@@ -125,17 +128,7 @@ async def run() -> None:
         "user_id": args.user_id,
         "role": args.role,
     }
-
-    # username = os.getenv("MW_USERNAME", "user_17")
-    # roles = os.getenv("MW_ROLE", "user")
-    # token = os.getenv("MW_TOKEN")
-    #
-    # current_principal = {
-    #     "user_id": username,
-    #     "role": roles,
-    #     "token": token,  # not used at the moment
-    # }
-    print(current_principal, file=sys.stderr)
+    #logger.info(current_principal)
 
     tool_registry: ToolRegistry = await build_middleware_tool_registry(current_principal) # currently done once at beginning of execution -> TODO: how will this be affected once multi-user access at same time has to be guaranteed
     registry = tool_registry
