@@ -9,8 +9,9 @@ Phase 1: MCP-compliant middleware server to be called by MCP Clients (e.g. DiveA
 Transport: stdio (JSON-RPC over pipes, as required by MCP clients).
 """
 
+import argparse
 import asyncio
-import os
+import logging
 from typing import Any
 
 import mcp.server.stdio
@@ -20,11 +21,13 @@ from mcp.server.models import InitializationOptions
 
 from mcp_manager.mcp_manager import ToolRegistry, build_middleware_tool_registry
 
+#logger = logging.getLogger(__name__)
+
 # --------------------------------------------------------------------
 # Build aggregated registry from your backend "servers"
 # --------------------------------------------------------------------
 import sys
-print("Started middleware application...", file=sys.stderr)
+#logger.info("Started middleware application...")
 
 registry: ToolRegistry | None = None
 
@@ -113,16 +116,19 @@ async def run() -> None:
 
     # obtain only subset of available MCP servers based on authenticated user
     global registry  # references the global variable at the beginning of the script
-    username = os.getenv("MW_USERNAME", "user_17")
-    roles = os.getenv("MW_ROLE", "user")
-    token = os.getenv("MW_TOKEN")
 
+    def parse_args():
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--user_id", required=True)
+        parser.add_argument("--role", required=True)
+        return parser.parse_args()
+
+    args = parse_args()
     current_principal = {
-        "user_id": username,
-        "role": roles,
-        "token": token,  # not used at the moment
+        "user_id": args.user_id,
+        "role": args.role,
     }
-    print(current_principal)
+    #logger.info(current_principal)
 
     tool_registry: ToolRegistry = await build_middleware_tool_registry(current_principal) # currently done once at beginning of execution -> TODO: how will this be affected once multi-user access at same time has to be guaranteed
     registry = tool_registry
