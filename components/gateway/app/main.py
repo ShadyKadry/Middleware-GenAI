@@ -1,6 +1,9 @@
+import json
 import logging
+import os
 import secrets
 import sys
+import tempfile
 from pathlib import Path
 from typing import List, Any, Dict, Optional, Set
 
@@ -10,6 +13,8 @@ from fastapi import (
     Form,
     HTTPException,
     Depends,
+    UploadFile,
+    File,
 )
 from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -45,6 +50,13 @@ REVOKED_REFRESH_TOKENS: Set[str] = set()
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+# embedding models exposed in the admin UI
+EMBEDDING_MODELS = [
+    {"id": "gemini-embedding-001", "label": "Gemini embedding-001"},
+    {"id": "stub-256", "label": "Stub (deterministic, 256d)"},
+]
+DEFAULT_EMBEDDING_MODEL_ID = "gemini-embedding-001"
+
 
 #######################################
 ### ---> Helper classes & functions ###
@@ -62,6 +74,10 @@ class ChatIn(BaseModel):
     message: str
     selected_tools: Optional[List[str]] = None
     chat_session_id: Optional[str] = None
+    auto_search: Optional[bool] = False
+    corpus_id: Optional[str] = None
+    embedding_model: Optional[str] = None
+    search_k: Optional[int] = 5
 
 class AdminCreateUserIn(BaseModel):
     username: str
@@ -101,6 +117,98 @@ def _require_admin(principal: dict) -> None:
 async def _get_user_by_username(db: AsyncSession, username: str) -> Optional[User]:
     res = await db.execute(select(User).where(User.username == username))
     return res.scalar_one_or_none()
+
+
+def chunk_text(text: str, chunk_size: int = 1200, overlap: int = 200) -> List[str]:
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return []
+
+    size = max(1, chunk_size)
+    overlap = max(0, min(overlap, size - 1))
+    step = size - overlap
+
+    chunks = []
+    for start in range(0, len(cleaned), step):
+        chunk = cleaned[start:start + size].strip()
+        if chunk:
+            chunks.append(chunk)
+    return chunks
+
+
+def extract_tool_payload(result: Any) -> Any:
+    if isinstance(result, dict):
+        content = result.get("content")
+        if isinstance(content, list) and content:
+            first = content[0]
+            if isinstance(first, dict) and "text" in first:
+                text = first["text"]
+                try:
+                    return json.loads(text)
+                except json.JSONDecodeError:
+                    return text
+    return result
+
+
+def convert_upload_to_markdown(filename: str, data: bytes) -> str:
+    if not data:
+        raise HTTPException(400, "Empty file")
+
+    suffix = Path(filename).suffix.lower()
+    if suffix in {".txt", ".md", ".markdown"}:
+        return data.decode("utf-8", errors="replace")
+
+    try:
+        from markitdown import MarkItDown
+    except Exception as exc:
+        raise HTTPException(
+            500,
+            "markitdown is not installed. Install it with: pip install 'markitdown[all]'",
+        ) from exc
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    try:
+        tmp.write(data)
+        tmp.flush()
+        tmp.close()
+        converter = MarkItDown()
+        result = converter.convert(tmp.name)
+        markdown = getattr(result, "text_content", None) or getattr(result, "text", None)
+        if not markdown:
+            raise HTTPException(500, "Conversion returned empty content")
+        return markdown
+    finally:
+        try:
+            os.remove(tmp.name)
+        except OSError:
+            pass
+
+
+def build_retrieval_instruction(payload: Any) -> str:
+    summary = payload
+    if isinstance(payload, dict) and "results" in payload:
+        summary_results = []
+        for result in payload.get("results", []):
+            meta = result.get("metadata", {}) if isinstance(result, dict) else {}
+            summary_results.append({
+                "id": result.get("id") if isinstance(result, dict) else None,
+                "score": result.get("score") if isinstance(result, dict) else None,
+                "text": meta.get("text"),
+                "source": meta.get("source"),
+                "chunk_index": meta.get("chunk_index"),
+            })
+        summary = {
+            "query": payload.get("query"),
+            "corpus_id": payload.get("corpus_id"),
+            "results": summary_results,
+        }
+
+    context_json = json.dumps(summary, ensure_ascii=True, indent=2)
+    return (
+        "Use the retrieved context below to answer the user's question. "
+        "If the context does not contain the answer, say you could not find it in the corpus.\n"
+        f"Retrieved context (JSON):\n{context_json}"
+    )
 
 
 #######################################
@@ -296,6 +404,81 @@ async def admin_create_user(
     return {"ok": True, "username": username, "role": role}
 
 
+@app.get("/api/admin/embedding-models")
+def list_embedding_models(principal: dict = Depends(current_principal)):
+    _require_admin(principal)
+    return {"models": EMBEDDING_MODELS, "default": DEFAULT_EMBEDDING_MODEL_ID}
+
+
+@app.post("/api/admin/documents/upload")
+async def upload_documents(
+    principal: dict = Depends(current_principal),
+    file: UploadFile = File(...),
+    corpus_id: str = Form(...),
+    embedding_model: str = Form(DEFAULT_EMBEDDING_MODEL_ID),
+    chat_session_id: str = Form(...),
+    user_id: Optional[str] = Form(None),
+    chunk_size: int = Form(1200),
+    chunk_overlap: int = Form(200),
+):
+    _require_admin(principal)
+
+    model_ids = {m["id"] for m in EMBEDDING_MODELS}
+    if embedding_model not in model_ids:
+        raise HTTPException(400, "Unknown embedding model")
+
+    if not corpus_id.strip():
+        raise HTTPException(400, "Missing corpus_id")
+
+    chat_session = CHAT_SESSIONS.get(chat_session_id)
+    if not chat_session:
+        raise HTTPException(400, "Chat not bootstrapped")
+
+    mcp_client = chat_session.get("mcp")
+    if not mcp_client:
+        raise HTTPException(400, "Chat not bootstrapped")
+
+    raw = await file.read()
+    filename = Path(file.filename).name if file.filename else "upload"
+    text = convert_upload_to_markdown(filename, raw)
+    chunks = chunk_text(text, chunk_size=chunk_size, overlap=chunk_overlap)
+    if not chunks:
+        raise HTTPException(400, "No text content found")
+
+    filename = Path(filename).name
+    documents = []
+    for idx, chunk in enumerate(chunks, start=1):
+        documents.append({
+            "id": f"{filename}-{idx}",
+            "text": chunk,
+            "source": filename,
+            "source_type": (file.content_type or ""),
+            "chunk_index": idx,
+        })
+
+    target_user_id = user_id or principal["sub"]
+
+    result = await mcp_client.call_tool(
+        "document_store.documents.upsert",
+        {
+            "user_id": target_user_id,
+            "corpus_id": corpus_id,
+            "embedding_model": embedding_model,
+            "documents": documents,
+        },
+    )
+    payload = extract_tool_payload(result)
+
+    return {
+        "ok": True,
+        "corpus_id": corpus_id,
+        "embedding_model": embedding_model,
+        "chunks": len(documents),
+        "result": result,
+        "payload": payload,
+    }
+
+
 #######################################
 ### ---> Chat API                   ###
 #######################################
@@ -367,5 +550,34 @@ async def api_chat(
     else:
         tools_for_model = []
 
-    text = await mcp_client.process_query(query=msg, enabled_tools=tools_for_model)
+    system_instruction = None
+    if payload.auto_search:
+        corpus_id = (payload.corpus_id or "").strip()
+        if not corpus_id:
+            raise HTTPException(status_code=400, detail="Missing corpus_id for auto search")
+
+        model_ids = {m["id"] for m in EMBEDDING_MODELS}
+        embedding_model = payload.embedding_model or DEFAULT_EMBEDDING_MODEL_ID
+        if embedding_model not in model_ids:
+            raise HTTPException(status_code=400, detail="Unknown embedding model")
+
+        search_k = payload.search_k or 5
+        search_result = await mcp_client.call_tool(
+            "document_store.documents.search",
+            {
+                "user_id": username,
+                "corpus_id": corpus_id,
+                "embedding_model": embedding_model,
+                "query": msg,
+                "k": search_k,
+            },
+        )
+        payload_data = extract_tool_payload(search_result)
+        system_instruction = build_retrieval_instruction(payload_data)
+
+    text = await mcp_client.process_query(
+        query=msg,
+        enabled_tools=tools_for_model,
+        system_instruction=system_instruction,
+    )
     return {"text": text}
