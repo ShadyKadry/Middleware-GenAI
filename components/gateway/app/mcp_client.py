@@ -3,7 +3,7 @@ import os
 import sys
 from contextlib import AsyncExitStack
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
 from google import genai
@@ -61,15 +61,19 @@ class MCPClient:
 
         self.function_declarations = convert_mcp_tools_to_gemini(tools)
 
-    async def process_query(self, query: str, enabled_tools: list):
+    async def process_query(self, query: str, enabled_tools: list, system_instruction: Optional[str] = None):
         user_prompt_content = types.Content(
             role="user",
             parts=[types.Part.from_text(text=query)]
         )
+        config = types.GenerateContentConfig(
+            tools=enabled_tools,
+            system_instruction=system_instruction,
+        )
         response = self.genai_client.models.generate_content(
             model=self.model_name,
             contents=[user_prompt_content],
-            config=types.GenerateContentConfig(tools=enabled_tools)
+            config=config,
         )
 
         final_text = []
@@ -111,9 +115,7 @@ class MCPClient:
                                     function_call_part,
                                     function_response_content,
                                 ],
-                                config=types.GenerateContentConfig(
-                                    tools=enabled_tools,
-                                ),
+                                config=config,
                             )
 
                             # extract final response text from Gemini after processing the tool call
@@ -124,6 +126,15 @@ class MCPClient:
 
         # return the combined response as a single formatted string
         return "\n".join(final_text)
+
+    async def call_tool(self, tool_name: str, tool_args: Dict[str, Any]):
+        if not self.session:
+            raise ValueError("MCP session not initialized.")
+
+        result = await self.session.call_tool(tool_name, tool_args)
+        if hasattr(result, "model_dump"):
+            return result.model_dump()
+        return result
 
     async def cleanup(self):
         """Clean up resources before exiting."""

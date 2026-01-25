@@ -38,6 +38,19 @@ input[type="checkbox"] {
   margin-top: 8px;
 }
 
+.upload-status {
+  margin-top: 8px;
+}
+
+.upload-status.ok {
+  color: #176b2a;
+}
+
+.upload-status.err {
+  color: #b00;
+}
+
+
 .tools-bar {
   display: flex;
   justify-content: space-between;
@@ -98,6 +111,28 @@ input[type="checkbox"] {
   line-height: 1.3;
   margin-top: 4px;
   word-break: break-word;
+}
+
+.chat-tools {
+  margin-bottom: 12px;
+  padding: 10px;
+  border: 1px solid #eee;
+  border-radius: 10px;
+  background: #fafafa;
+}
+
+.chat-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.chat-search-grid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
 }
 
 

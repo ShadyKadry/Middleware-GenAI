@@ -1,8 +1,9 @@
 
+import re
 from typing import Any, Dict, List
 
-from db.pgvector_store import PgVectorStore
-from embedding_manager.embedding_backend import StubEmbeddingModel  # or GeminiEmbeddingModel
+from db.qdrant_store import QdrantVectorStore
+from embedding_manager.embedding_backend import DEFAULT_EMBEDDING_MODEL_ID, get_embedding_model
 from embedding_manager.embedding_manager import EmbeddingManager
 from mcp_manager.data.tool_models import MockBackendServer, ToolRegistry, BackendServer
 from mcp_manager.mcp_server_registry import backend_registry
@@ -14,6 +15,15 @@ async def get_mcp_servers(current_principal: Dict[str, Any]) -> List[BackendServ
     on its internal implementation.
     """
     return await backend_registry.get_backends_for_principal(current_principal)
+
+
+def _normalize_collection_part(value: str) -> str:
+    cleaned = re.sub(r"[^a-zA-Z0-9_-]+", "_", value).strip("_")
+    return cleaned or "default"
+
+
+def build_collection_name(corpus_id: str, model_id: str) -> str:
+    return f"{_normalize_collection_part(corpus_id)}__{_normalize_collection_part(model_id)}"
 
 
 async def build_middleware_tool_registry(current_principal: dict) -> ToolRegistry:
@@ -52,33 +62,47 @@ async def build_embedding_manager(current_principal: dict) -> BackendServer:
     Handles all internal content management.
      """
 
-    # TODO: make {store, model} dynamic based on user
-    store = PgVectorStore()
-    model = StubEmbeddingModel(dim=256)
+    # Qdrant collections are created per model to allow different vector sizes.
+    store = QdrantVectorStore()
+    manager_cache: Dict[str, EmbeddingManager] = {}
 
-    # FOR DEMO PURPOSE ONLY: Bootstrap demo collection (idempotent: upsert overwrites if exists) TODO: start previous snapshot to reinstate DB state?!
-    #await store.bootstrap_demo_corpus(model, collection="demo_corpus")
-    # Optional: previously we bootstrapped a demo corpus in Qdrant.
-    # For pgvector we skip this and let the client index documents via the tool.
-    # await store.bootstrap_demo_corpus(model, collection="demo_corpus")
-
-    em = EmbeddingManager(embedding_model=model, vector_store=store)
+    def get_manager(model_id: str) -> EmbeddingManager:
+        if model_id not in manager_cache:
+            model = get_embedding_model(model_id)
+            manager_cache[model_id] = EmbeddingManager(embedding_model=model, vector_store=store)
+        return manager_cache[model_id]
 
     backend = MockBackendServer("document_store")  # TODO: move to backends.json; how about args and factory()?
 
     async def upsert_docs(args: Dict[str, Any]) -> Dict[str, Any]:
+        model_id = args.get("embedding_model") or DEFAULT_EMBEDDING_MODEL_ID
+        collection = build_collection_name(args["corpus_id"], model_id)
+        em = get_manager(model_id)
+
+        documents = []
+        for doc in args["documents"]:
+            doc_copy = dict(doc)
+            doc_copy.setdefault("embedding_model", model_id)
+            documents.append(doc_copy)
+
         return await em.upsert_documents(
             user_id=args["user_id"],
             corpus_id=args["corpus_id"],
-            documents=args["documents"],
+            documents=documents,
+            collection_name=collection,
         )
 
     async def search_docs(args: Dict[str, Any]) -> Dict[str, Any]:
+        model_id = args.get("embedding_model") or DEFAULT_EMBEDDING_MODEL_ID
+        collection = build_collection_name(args["corpus_id"], model_id)
+        em = get_manager(model_id)
+
         return await em.search_documents(
             user_id=args["user_id"],
             corpus_id=args["corpus_id"],
             query=args["query"],
             k=args.get("k", 5),
+            collection_name=collection,
         )
 
     # storing/managing database is admin functionality only
@@ -91,6 +115,7 @@ async def build_embedding_manager(current_principal: dict) -> BackendServer:
                 "properties": {
                     "user_id": {"type": "string"},
                     "corpus_id": {"type": "string"},
+                    "embedding_model": {"type": "string"},
                     "documents": {
                         "type": "array",
                         "items": {
@@ -116,6 +141,7 @@ async def build_embedding_manager(current_principal: dict) -> BackendServer:
             "properties": {
                 "user_id": {"type": "string"},
                 "corpus_id": {"type": "string"},
+                "embedding_model": {"type": "string"},
                 "query": {"type": "string"},
                 "k": {"type": "integer"},
             },

@@ -21,6 +21,28 @@
 
     <div id="chatLog" style="white-space: pre-wrap; margin-bottom: 12px;"></div>
 
+    <div class="chat-tools">
+      <label class="chat-toggle">
+        <input id="autoSearchToggle" type="checkbox" />
+        Auto pre-search
+      </label>
+
+      <div class="chat-search-grid">
+        <div>
+          <label for="chatCorpusId">Corpus ID</label>
+          <input id="chatCorpusId" name="chat_corpus_id" type="text" />
+        </div>
+        <div>
+          <label for="chatEmbeddingModel">Embedding model</label>
+          <select id="chatEmbeddingModel" name="chat_embedding_model"></select>
+        </div>
+        <div>
+          <label for="chatSearchK">Top K</label>
+          <input id="chatSearchK" name="chat_search_k" type="number" value="5" min="1" />
+        </div>
+      </div>
+    </div>
+
     <form id="chatForm">
       <input id="chatInput" name="message" placeholder="Type a message..." required />
       <button type="submit">Send</button>
@@ -46,6 +68,35 @@
 
     <ul id="toolsList" class="tools-list"></ul>
   </div>
+
+  <div class="card" id="adminUploadCard" style="display: none;">
+    <h3>Admin: Upload Documents</h3>
+
+    <form id="uploadForm">
+      <label for="uploadCorpusId">Corpus ID</label>
+      <input id="uploadCorpusId" name="corpus_id" type="text" required />
+
+      <label for="uploadUserId">User ID (optional)</label>
+      <input id="uploadUserId" name="user_id" type="text" placeholder="defaults to your user" />
+
+      <label for="uploadEmbeddingModel">Embedding model</label>
+      <select id="uploadEmbeddingModel" name="embedding_model"></select>
+
+      <label for="uploadChunkSize">Chunk size</label>
+      <input id="uploadChunkSize" name="chunk_size" type="number" value="1200" min="100" />
+
+      <label for="uploadChunkOverlap">Chunk overlap</label>
+      <input id="uploadChunkOverlap" name="chunk_overlap" type="number" value="200" min="0" />
+
+      <label for="uploadFile">File (.txt)</label>
+      <input id="uploadFile" name="file" type="file" accept=".txt,text/plain" required />
+
+      <button type="submit" id="uploadBtn">Upload</button>
+    </form>
+
+    <div id="uploadStatus" class="upload-status"></div>
+  </div>
+
 
   <script src="/static/app.js"></script>
 
