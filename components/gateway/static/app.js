@@ -1,7 +1,26 @@
+let CURRENT_USER = null;
+let CURRENT_ROLE = null;
+
 async function loadMe() {
   const res = await fetch("/api/me");
-  if (res.ok) {
-    document.getElementById("meBox").textContent = await res.text();
+  if (!res.ok) return;
+
+  const data = await res.json().catch(() => null);
+  if (!data) return;
+
+  CURRENT_USER = data.user;
+  CURRENT_ROLE = data.role;
+
+  const meBox = document.getElementById("meBox");
+  if (meBox) meBox.textContent = JSON.stringify(data, null, 2);
+
+  const adminCard = document.getElementById("adminUploadCard");
+  if (adminCard) {
+    adminCard.style.display = data.role === "admin" ? "block" : "none";
+  }
+
+  if (data.role === "admin") {
+    loadEmbeddingModels();
   }
 }
 
@@ -28,6 +47,7 @@ if (logoutBtn) {
 
 // ---- tool selection state ---- TODO persisted, but only in memory not in DB
 const TOOLS_STORAGE_KEY = "enabled_tools_v1";
+const CHAT_SEARCH_STORAGE_KEY = "chat_presearch_v1";
 let selectedTools = new Set();
 
 function loadSelectedTools() {
@@ -48,6 +68,43 @@ function saveSelectedTools() {
 function updateEnabledCount() {
   const el = document.getElementById("toolsEnabledCount");
   if (el) el.textContent = String(selectedTools.size);
+}
+
+function loadChatSearchSettings() {
+  try {
+    const raw = localStorage.getItem(CHAT_SEARCH_STORAGE_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (!data || typeof data !== "object") return;
+
+    const toggle = document.getElementById("autoSearchToggle");
+    const corpus = document.getElementById("chatCorpusId");
+    const model = document.getElementById("chatEmbeddingModel");
+    const topk = document.getElementById("chatSearchK");
+
+    if (toggle && typeof data.enabled === "boolean") toggle.checked = data.enabled;
+    if (corpus && typeof data.corpus_id === "string") corpus.value = data.corpus_id;
+    if (model && typeof data.embedding_model === "string") model.value = data.embedding_model;
+    if (topk && typeof data.search_k === "number") topk.value = String(data.search_k);
+  } catch (_) {}
+}
+
+function saveChatSearchSettings() {
+  const toggle = document.getElementById("autoSearchToggle");
+  const corpus = document.getElementById("chatCorpusId");
+  const model = document.getElementById("chatEmbeddingModel");
+  const topk = document.getElementById("chatSearchK");
+
+  const payload = {
+    enabled: !!(toggle && toggle.checked),
+    corpus_id: corpus ? corpus.value : "",
+    embedding_model: model ? model.value : "",
+    search_k: topk ? Number(topk.value || 5) : 5,
+  };
+
+  try {
+    localStorage.setItem(CHAT_SEARCH_STORAGE_KEY, JSON.stringify(payload));
+  } catch (_) {}
 }
 
 function renderTools(toolsUi) {
@@ -151,6 +208,113 @@ async function bootstrap() {
   }
 }
 
+async function loadEmbeddingModels() {
+  const selects = [
+    document.getElementById("uploadEmbeddingModel"),
+    document.getElementById("chatEmbeddingModel"),
+  ].filter(Boolean);
+  if (selects.length === 0) return;
+
+  const res = await fetch("/api/admin/embedding-models");
+  if (!res.ok) {
+    for (const select of selects) {
+      select.innerHTML = "";
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = "Embedding models unavailable";
+      select.appendChild(opt);
+    }
+    return;
+  }
+
+  const data = await res.json().catch(() => ({}));
+  const models = Array.isArray(data.models) ? data.models : [];
+
+  for (const select of selects) {
+    select.innerHTML = "";
+    for (const model of models) {
+      const opt = document.createElement("option");
+      opt.value = model.id;
+      opt.textContent = model.label || model.id;
+      select.appendChild(opt);
+    }
+  }
+
+  const defaultValue = data.default || (models.length > 0 ? models[0].id : "");
+  for (const select of selects) {
+    if (defaultValue) select.value = defaultValue;
+  }
+
+  loadChatSearchSettings();
+}
+
+const uploadForm = document.getElementById("uploadForm");
+if (uploadForm) {
+  uploadForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const status = document.getElementById("uploadStatus");
+    if (status) {
+      status.textContent = "";
+      status.className = "upload-status";
+    }
+
+    if (!CHAT_SESSION_ID) {
+      if (status) {
+        status.textContent = "Chat session not ready yet. Try again in a moment.";
+        status.className = "upload-status err";
+      }
+      return;
+    }
+
+    const fileInput = document.getElementById("uploadFile");
+    const file = fileInput && fileInput.files ? fileInput.files[0] : null;
+    if (!file) {
+      if (status) {
+        status.textContent = "Please choose a .txt file to upload.";
+        status.className = "upload-status err";
+      }
+      return;
+    }
+
+    const formData = new FormData(uploadForm);
+    formData.append("chat_session_id", CHAT_SESSION_ID);
+    if (!formData.get("user_id") && CURRENT_USER) {
+      formData.set("user_id", CURRENT_USER);
+    }
+
+    const res = await fetch("/api/admin/documents/upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (status) {
+        status.textContent = data.detail || "Upload failed";
+        status.className = "upload-status err";
+      }
+      return;
+    }
+
+    if (status) {
+      status.textContent = `Uploaded ${data.chunks} chunk(s) to ${data.corpus_id} using ${data.embedding_model}.`;
+      status.className = "upload-status ok";
+    }
+  });
+}
+
+const autoSearchToggle = document.getElementById("autoSearchToggle");
+const chatCorpusId = document.getElementById("chatCorpusId");
+const chatEmbeddingModel = document.getElementById("chatEmbeddingModel");
+const chatSearchK = document.getElementById("chatSearchK");
+
+if (autoSearchToggle) autoSearchToggle.addEventListener("change", saveChatSearchSettings);
+if (chatCorpusId) chatCorpusId.addEventListener("input", saveChatSearchSettings);
+if (chatEmbeddingModel) chatEmbeddingModel.addEventListener("change", saveChatSearchSettings);
+if (chatSearchK) chatSearchK.addEventListener("input", saveChatSearchSettings);
+
+
 // ---- existing chat handler: include selected tools ----
 const chatForm = document.getElementById("chatForm");
 if (chatForm) {
@@ -165,6 +329,16 @@ if (chatForm) {
     const message = chatInput.value.trim();
     if (!message) return;
 
+    const autoSearch = autoSearchToggle ? autoSearchToggle.checked : false;
+    const corpusId = chatCorpusId ? chatCorpusId.value.trim() : "";
+    const embeddingModel = chatEmbeddingModel ? chatEmbeddingModel.value : "";
+    const searchK = chatSearchK ? Number(chatSearchK.value || 5) : 5;
+
+    if (autoSearch && !corpusId) {
+      chatErr.textContent = "Auto pre-search requires a corpus ID.";
+      return;
+    }
+
     chatLog.textContent += `You: ${message}\n`;
     chatInput.value = "";
 
@@ -175,6 +349,10 @@ if (chatForm) {
         message,
         selected_tools: [...selectedTools],
         chat_session_id: CHAT_SESSION_ID,
+        auto_search: autoSearch,
+        corpus_id: corpusId,
+        embedding_model: embeddingModel,
+        search_k: searchK,
       }),
     });
 
