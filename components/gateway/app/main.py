@@ -1,7 +1,9 @@
 import json
 import logging
+import os
 import secrets
 import sys
+import tempfile
 from pathlib import Path
 from typing import List, Any, Dict, Optional
 
@@ -141,6 +143,40 @@ def extract_tool_payload(result: Any) -> Any:
     return result
 
 
+def convert_upload_to_markdown(filename: str, data: bytes) -> str:
+    if not data:
+        raise HTTPException(400, "Empty file")
+
+    suffix = Path(filename).suffix.lower()
+    if suffix in {".txt", ".md", ".markdown"}:
+        return data.decode("utf-8", errors="replace")
+
+    try:
+        from markitdown import MarkItDown
+    except Exception as exc:
+        raise HTTPException(
+            500,
+            "markitdown is not installed. Install it with: pip install 'markitdown[all]'",
+        ) from exc
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    try:
+        tmp.write(data)
+        tmp.flush()
+        tmp.close()
+        converter = MarkItDown()
+        result = converter.convert(tmp.name)
+        markdown = getattr(result, "text_content", None) or getattr(result, "text", None)
+        if not markdown:
+            raise HTTPException(500, "Conversion returned empty content")
+        return markdown
+    finally:
+        try:
+            os.remove(tmp.name)
+        except OSError:
+            pass
+
+
 def build_retrieval_instruction(payload: Any) -> str:
     summary = payload
     if isinstance(payload, dict) and "results" in payload:
@@ -266,21 +302,20 @@ async def upload_documents(
         raise HTTPException(400, "Chat not bootstrapped")
 
     raw = await file.read()
-    if not raw:
-        raise HTTPException(400, "Empty file")
-
-    text = raw.decode("utf-8", errors="replace")
+    filename = Path(file.filename).name if file.filename else "upload"
+    text = convert_upload_to_markdown(filename, raw)
     chunks = chunk_text(text, chunk_size=chunk_size, overlap=chunk_overlap)
     if not chunks:
         raise HTTPException(400, "No text content found")
 
-    filename = Path(file.filename).name if file.filename else "upload.txt"
+    filename = Path(filename).name
     documents = []
     for idx, chunk in enumerate(chunks, start=1):
         documents.append({
             "id": f"{filename}-{idx}",
             "text": chunk,
             "source": filename,
+            "source_type": (file.content_type or ""),
             "chunk_index": idx,
         })
 

@@ -42,8 +42,8 @@ Implemented in:
 
 ## Admin Upload Flow
 1) Admin opens the upload panel in the UI.
-2) Uploads a `.txt` file and selects a corpus and embedding model.
-3) Gateway chunks the text and calls the middleware tool:
+2) Uploads a file (e.g., `.txt`, `.pdf`, `.pptx`, `.docx`) and selects a corpus and embedding model.
+3) Gateway converts the file to Markdown (if needed), chunks it, and calls the middleware tool:
    - `document_store.documents.upsert`
 4) Middleware embeds each chunk and writes to Qdrant.
 
@@ -54,6 +54,15 @@ Files:
 - UI: `components/gateway/templates/app.html`
 - JS: `components/gateway/static/app.js`
 - API: `components/gateway/app/main.py`
+
+### File Conversion (Multi-type Support)
+Non-text formats (PDF, PPTX, DOCX, etc.) are converted to Markdown using `markitdown` before chunking.
+
+Why Markdown:
+- A single normalized text format keeps downstream chunking and embedding logic simple.
+- Most rich document formats can be flattened into readable, linear text.
+
+If `markitdown` is missing, the upload API will return an error for non-text formats.
 
 ### Chunking Strategy
 Chunking happens in the gateway before embeddings. Defaults:
@@ -107,6 +116,7 @@ Tool definitions live in:
 ## Environment Requirements
 - `GEMINI_API_KEY` must be set for `gemini-embedding-001`.
 - Qdrant must be running (`docker compose up`).
+- `markitdown[all]` must be installed to ingest PDF/PPTX/DOCX and other rich formats.
 
 ## Troubleshooting
 No search results:
