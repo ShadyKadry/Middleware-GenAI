@@ -183,7 +183,7 @@ class RemoteBackendServer(BackendServer):
                 raise ValueError("server_url must be set for http transport")
 
             # streamable HTTP transport
-            read_stream, write_stream = await self._exit_stack.enter_async_context(
+            read_stream, write_stream, *_ = await self._exit_stack.enter_async_context(
                 streamablehttp_client(
                     url=self.config.server_url,
                     headers=self.config.headers or None,
