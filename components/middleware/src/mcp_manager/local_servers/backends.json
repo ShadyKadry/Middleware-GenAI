@@ -49,8 +49,8 @@
     {
       "name": "deepwiki",
       "kind": "remote_mcp",
-      "transport": "sse",
-      "server_url": "https://mcp.deepwiki.com/sse",
+      "transport": "http",
+      "server_url": "https://mcp.deepwiki.com/mcp",
       "required_roles": ["normal_user", "admin", "tester"],
       "allowed_users": ["user", "test_user_1"],
       "enabled": true
