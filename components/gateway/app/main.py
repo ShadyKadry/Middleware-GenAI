@@ -57,6 +57,17 @@ EMBEDDING_MODELS = [
 ]
 DEFAULT_EMBEDDING_MODEL_ID = "gemini-embedding-001"
 
+# middleware backend registry config
+BACKENDS_CONFIG_PATH = (
+    BASE_DIR.parent.parent
+    / "components"
+    / "middleware"
+    / "src"
+    / "mcp_manager"
+    / "local_servers"
+    / "backends.json"
+)
+
 
 #######################################
 ### ---> Helper classes & functions ###
@@ -117,6 +128,83 @@ def _require_admin(principal: dict) -> None:
 async def _get_user_by_username(db: AsyncSession, username: str) -> Optional[User]:
     res = await db.execute(select(User).where(User.username == username))
     return res.scalar_one_or_none()
+
+
+def _ensure_list(value: Any) -> List[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(v).strip() for v in value if str(v).strip()]
+    if isinstance(value, str):
+        parts = [p.strip() for p in value.replace(",", ";").split(";")]
+        return [p for p in parts if p]
+    raise HTTPException(status_code=400, detail="Invalid list field")
+
+
+def load_backends_config() -> Dict[str, Any]:
+    if not BACKENDS_CONFIG_PATH.exists():
+        return {"backends": []}
+    with BACKENDS_CONFIG_PATH.open("r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_backends_config(config: Dict[str, Any]) -> None:
+    BACKENDS_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with BACKENDS_CONFIG_PATH.open("w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2)
+
+
+def normalize_backend_def(payload: Dict[str, Any]) -> Dict[str, Any]:
+    name = payload.get("name")
+    if not name or not isinstance(name, str):
+        raise HTTPException(status_code=400, detail="name is required")
+
+    kind = payload.get("kind") or "remote_mcp"
+    if kind not in {"remote_mcp", "local_mcp_mock"}:
+        raise HTTPException(status_code=400, detail="Unsupported kind")
+
+    backend: Dict[str, Any] = {
+        "name": name.strip(),
+        "kind": kind,
+        "enabled": bool(payload.get("enabled", True)),
+        "required_roles": _ensure_list(payload.get("required_roles")),
+        "allowed_users": _ensure_list(payload.get("allowed_users")),
+    }
+
+    if kind == "local_mcp_mock":
+        factory = payload.get("factory")
+        if not factory:
+            raise HTTPException(status_code=400, detail="factory is required for local_mcp_mock")
+        backend["factory"] = str(factory)
+        return backend
+
+    transport = payload.get("transport") or "stdio"
+    if transport not in {"stdio", "sse", "http"}:
+        raise HTTPException(status_code=400, detail="Unsupported transport")
+    backend["transport"] = transport
+
+    if transport == "stdio":
+        command = payload.get("command")
+        if not command:
+            raise HTTPException(status_code=400, detail="command is required for stdio transport")
+        backend["command"] = str(command)
+        args = payload.get("args") or []
+        backend["args"] = _ensure_list(args)
+        env = payload.get("env") or {}
+        if not isinstance(env, dict):
+            raise HTTPException(status_code=400, detail="env must be an object")
+        backend["env"] = env
+    else:
+        server_url = payload.get("server_url")
+        if not server_url:
+            raise HTTPException(status_code=400, detail="server_url is required for remote transport")
+        backend["server_url"] = str(server_url)
+        headers = payload.get("headers") or {}
+        if not isinstance(headers, dict):
+            raise HTTPException(status_code=400, detail="headers must be an object")
+        backend["headers"] = headers
+
+    return backend
 
 
 def chunk_text(text: str, chunk_size: int = 1200, overlap: int = 200) -> List[str]:
@@ -402,6 +490,29 @@ async def admin_create_user(
     await db.commit()
 
     return {"ok": True, "username": username, "role": role}
+
+
+@app.post("/api/admin/mcp-servers")
+async def register_mcp_server(
+    payload: Dict[str, Any],
+    principal: dict = Depends(current_principal),
+):
+    _require_admin(principal)
+
+    backend = normalize_backend_def(payload)
+
+    config = load_backends_config()
+    if "backends" not in config or not isinstance(config["backends"], list):
+        raise HTTPException(status_code=500, detail="Invalid backend config format")
+
+    existing = {b.get("name") for b in config["backends"]}
+    if backend["name"] in existing:
+        raise HTTPException(status_code=409, detail="Backend name already exists")
+
+    config["backends"].append(backend)
+    save_backends_config(config)
+
+    return {"ok": True, "backend": backend}
 
 
 @app.get("/api/admin/embedding-models")
