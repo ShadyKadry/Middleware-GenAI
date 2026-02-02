@@ -34,7 +34,7 @@ services:
       timeout: 3s
       retries: 10
 
-  # your app (example – adjust as needed)
+  # TODO run application inside docker
   # app:
   #   build: .
   #   depends_on:

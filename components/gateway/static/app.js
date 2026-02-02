@@ -1,6 +1,24 @@
 let CURRENT_USER = null;
 let CURRENT_ROLE = null;
+let CHAT_SESSION_ID = null;
+const TOOLS_STORAGE_KEY = "enabled_tools_v1";
+const CHAT_SEARCH_STORAGE_KEY = "chat_presearch_v1";
+let selectedTools = new Set();
 
+/*
+  --- # HELPER FUNCTIONS # ---
+ */
+
+/* TODO once normal users can be created as well. */
+function showAdminPanel(which) {
+  const upload = document.getElementById("adminUploadCard");
+  const create = document.getElementById("createUserPanel");
+
+  if (upload) upload.classList.toggle("hidden", which !== "upload");
+  if (create) create.classList.toggle("hidden", which !== "createUser");
+}
+
+/* Loads user credentials and displays sidebar. */
 async function loadMe() {
   const res = await fetch("/api/me");
   if (!res.ok) return;
@@ -14,14 +32,19 @@ async function loadMe() {
   const meBox = document.getElementById("meBox");
   if (meBox) meBox.textContent = JSON.stringify(data, null, 2);
 
-  const adminCard = document.getElementById("adminUploadCard");
-  if (adminCard) {
-    adminCard.style.display = data.role === "admin" ? "block" : "none";
+  const adminSidebar = document.getElementById("adminSidebar");
+  const isAdmin = data.role === "admin";
+  if (adminSidebar) adminSidebar.classList.toggle("hidden", !isAdmin);
+
+  if (!isAdmin) {
+    showAdminPanel("none");
+    return;
   }
 
-  if (data.role === "admin") {
-    loadEmbeddingModels();
-  }
+  // default panel
+  showAdminPanel("upload"); // or "createUser"
+
+  await loadEmbeddingModels();
 }
 
 const form = document.getElementById("loginForm");
@@ -33,7 +56,7 @@ if (form) {
       body: new FormData(form),
     });
     if (res.ok) window.location.href = "/app";
-    else document.getElementById("msg").textContent = "Login failed";
+    else document.getElementById("msg").textContent = "Login failed! Wrong username or password.";
   });
 }
 
@@ -46,10 +69,6 @@ if (logoutBtn) {
 }
 
 // ---- tool selection state ---- TODO persisted, but only in memory not in DB
-const TOOLS_STORAGE_KEY = "enabled_tools_v1";
-const CHAT_SEARCH_STORAGE_KEY = "chat_presearch_v1";
-let selectedTools = new Set();
-
 function loadSelectedTools() {
   try {
     const raw = localStorage.getItem(TOOLS_STORAGE_KEY);
@@ -117,12 +136,12 @@ function renderTools(toolsUi) {
     const li = document.createElement("li");
     li.className = "tools-item";
 
-
     const label = document.createElement("label");
     label.className = "tools-label";
 
     const cb = document.createElement("input");
     cb.type = "checkbox";
+
     cb.checked = selectedTools.has(t.name);
     cb.addEventListener("change", () => {
       if (cb.checked) selectedTools.add(t.name);
@@ -153,8 +172,6 @@ function renderTools(toolsUi) {
 
   updateEnabledCount();
 }
-
-let CHAT_SESSION_ID = null;
 
 async function bootstrap() {
   const toolsStatus = document.getElementById("toolsStatus");
@@ -208,6 +225,7 @@ async function bootstrap() {
   }
 }
 
+// ---- chat search (RAG) ----
 async function loadEmbeddingModels() {
   const selects = [
     document.getElementById("uploadEmbeddingModel"),
@@ -248,6 +266,17 @@ async function loadEmbeddingModels() {
   loadChatSearchSettings();
 }
 
+const autoSearchToggle = document.getElementById("autoSearchToggle");
+const chatCorpusId = document.getElementById("chatCorpusId");
+const chatEmbeddingModel = document.getElementById("chatEmbeddingModel");
+const chatSearchK = document.getElementById("chatSearchK");
+
+if (autoSearchToggle) autoSearchToggle.addEventListener("change", saveChatSearchSettings);
+if (chatCorpusId) chatCorpusId.addEventListener("input", saveChatSearchSettings);
+if (chatEmbeddingModel) chatEmbeddingModel.addEventListener("change", saveChatSearchSettings);
+if (chatSearchK) chatSearchK.addEventListener("input", saveChatSearchSettings);
+
+// ---- upload documents (admin only) ----
 const uploadForm = document.getElementById("uploadForm");
 if (uploadForm) {
   uploadForm.addEventListener("submit", async (e) => {
@@ -304,15 +333,21 @@ if (uploadForm) {
   });
 }
 
-const autoSearchToggle = document.getElementById("autoSearchToggle");
-const chatCorpusId = document.getElementById("chatCorpusId");
-const chatEmbeddingModel = document.getElementById("chatEmbeddingModel");
-const chatSearchK = document.getElementById("chatSearchK");
+// ---- create users (admin only) ----
+async function adminCreateUser({ username, password, role }) {
+  const res = await fetch("/api/admin/users", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ username, password, role }),
+  });
 
-if (autoSearchToggle) autoSearchToggle.addEventListener("change", saveChatSearchSettings);
-if (chatCorpusId) chatCorpusId.addEventListener("input", saveChatSearchSettings);
-if (chatEmbeddingModel) chatEmbeddingModel.addEventListener("change", saveChatSearchSettings);
-if (chatSearchK) chatSearchK.addEventListener("input", saveChatSearchSettings);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || JSON.stringify(data) || "Request failed");
+  return data; // { ok: true, username, role }
+}
 
 
 // ---- existing chat handler: include selected tools ----
@@ -372,3 +407,29 @@ if (document.getElementById("toolsList")) {
 }
 
 loadMe();
+
+
+function showPanel(targets) {
+  const panels = document.querySelectorAll(".panel");
+
+  // 1) hide everything first
+  panels.forEach(p => p.classList.add("hidden"));
+
+  // 2) then show requested panel(s)
+  targets.split(",").forEach(id => {
+    const el = document.getElementById(id.trim());
+    if (el) el.classList.remove("hidden");
+  });
+}
+
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-target]");
+  if (!btn) return;
+
+  // active button highlight
+  document.querySelectorAll(".sidebar-actions button")
+    .forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+
+  showPanel(btn.dataset.target);
+});

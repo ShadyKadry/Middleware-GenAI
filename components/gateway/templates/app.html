@@ -2,103 +2,185 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>App</title>
+  <title>Middleware for GenAI</title>
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
-  <div class="bar">
-    <h2>Welcome, {{ user }}! </h2>
-    <button id="logoutBtn">Log out</button>
-  </div>
+  <div class="layout">
 
-  <div class="card">
-    <p>You are logged in.</p>
-    <pre id="meBox"></pre>
-  </div>
+    <!-- Sidebar (only visible for admins) TODO make available for all. -->
+    <aside id="adminSidebar" class="sidebar hidden">
+      <h2>Welcome, {{ user }}! </h2>
+      <h3>Role: {{ CURRENT_ROLE }} </h3>
+      <button id="logoutBtn">Log out</button>
 
-  <div class="card">
-    <h3>Chat</h3>
 
-    <div id="chatLog" style="white-space: pre-wrap; margin-bottom: 12px;"></div>
+      <h3>You can:</h3>
+      <div class="sidebar-actions">
+        <button type="button" data-target="panelDataUpload">Upload documents</button>
+        <button type="button" data-target="panelUserCreation">Create user</button>
+        <button type="button" data-target="panelServerRegistration">Add MCP servers</button>
+        <button type="button" data-target="panelAutoSearch,panelChat,panelTools">Chat</button>
+      </div>
 
-    <div class="chat-tools">
-      <label class="chat-toggle">
-        <input id="autoSearchToggle" type="checkbox" />
-        Auto pre-search
-      </label>
+    </aside>
 
-      <div class="chat-search-grid">
-        <div>
-          <label for="chatCorpusId">Corpus ID</label>
-          <input id="chatCorpusId" name="chat_corpus_id" type="text" />
-        </div>
-        <div>
-          <label for="chatEmbeddingModel">Embedding model</label>
-          <select id="chatEmbeddingModel" name="chat_embedding_model"></select>
-        </div>
-        <div>
-          <label for="chatSearchK">Top K</label>
-          <input id="chatSearchK" name="chat_search_k" type="number" value="5" min="1" />
+    <!-- Main content -->
+    <main class="main">
+
+      <!-- Show credentials of logged-in user. -->
+      <div id="panelWelcome" class="card panel">
+        <p>You are logged in.</p>
+        <pre id="meBox"></pre>
+      </div>
+
+      <!--- ADMIN only: Upload data. --->
+      <div id="panelDataUpload" class="card panel hidden">
+        <h2>Upload documents.</h2>
+
+        <form id="uploadForm">
+          <label for="uploadCorpusId">Corpus ID:</label>
+          <input id="uploadCorpusId" name="corpus_id" type="text" placeholder="Identifier which is used to store/retrieve the document..." required />
+
+          <label for="uploadUserId">Allowed User ID's (optional):</label>
+          <input id="uploadUserId" name="user_id" type="text" placeholder="Please state the user's which are allowed to see this document... (seperated by ;)" />
+
+          <label for="uploadEmbeddingModel">Embedding Model:</label>
+          <select id="uploadEmbeddingModel" name="embedding_model"></select>
+
+          <div class="upload-row">
+            <div class="field">
+              <label for="uploadChunkSize">Chunk Size:</label>
+              <input id="uploadChunkSize" name="chunk_size" type="number" value="1200" min="100" />
+            </div>
+
+            <div class="field">
+              <label for="uploadChunkOverlap">Chunk Overlap:</label>
+              <input id="uploadChunkOverlap" name="chunk_overlap" type="number" value="200" min="0" />
+            </div>
+
+            <div class="field">
+              <label for="uploadFile">File (.txt, .pdf, .pptx, .docx, .md, ...)</label>
+              <input id="uploadFile" name="file" type="file" accept="..." required />
+            </div>
+          </div>
+
+          <button type="submit" id="uploadBtn">Upload</button>
+        </form>
+
+        <div id="uploadStatus" class="upload-status"></div>
+      </div>
+
+
+      <!-- ADMIN only: Create user. -->
+      <div id="panelUserCreation" class="card panel hidden">
+        <h2>Create new user.</h2>
+
+        <form id="createUserForm">
+          <input id="cuUsername" placeholder="Username" required />
+
+          <input id="cuPassword"
+                 type="password"
+                 placeholder="Password"
+                 required />
+
+          <div class="inline-field">
+            <label for="cuRole">Role:</label>
+            <select id="cuRole">
+              <option value="guest">Guest</option>
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+
+          <button type="submit">Create</button>
+        </form>
+
+        <div id="createUserMsg"></div>
+      </div>
+
+      <!-- ADMIN only: Register new servers. -->
+      <div id="panelServerRegistration" class="card panel hidden">
+        <h2>Register new MCP servers.</h2>
+
+        <form id="registerNewMCPServer">
+          <button type="submit">Register</button>
+        </form>
+      </div>
+
+
+      <!--- Display auto pre-search.--->
+      <div id="panelAutoSearch" class="card panel">
+        <label class="chat-autosearch-toggle">
+          <input id="autoSearchToggle" type="checkbox" /> Auto pre-search
+        </label>
+
+        <div id="chat-autosearch-form" >
+          <div>
+            <div class="chat-autosearch-field is-string">
+              <label for="chatCorpusId">Corpus ID's:</label>
+              <input id="chatCorpusId" name="chat_corpus_id" type="text" placeholder="Please state the ID's which should be searched... (seperated by ;)"/>
+            </div>
+          </div>
+
+          <div class="chat-autosearch-row">
+            <div class="chat-autosearch-field is-select">
+              <label for="chatEmbeddingModel">Embedding model:</label>
+              <select id="chatEmbeddingModel" name="chat_embedding_model"></select>
+            </div>
+
+            <div class="chat-autosearch-field">
+              <label for="chatSearchK">Top K:</label>
+              <input id="chatSearchK" name="chat_search_k" type="number" value="5" min="1" />
+            </div>
+          </div>
         </div>
       </div>
-    </div>
 
-    <form id="chatForm">
-      <input id="chatInput" name="message" placeholder="Type a message..." required />
-      <button type="submit">Send</button>
-    </form>
 
-    <div id="chatErr" class="err"></div>
-  </div>
+      <!-- Chat interface. -->
+      <div id="panelChat" class="card panel">
+        <h3>Chat</h3>
 
-  <div class="card">
-    <h3>Available Tools</h3>
+        <div id="chatLog" style="white-space: pre-wrap; margin-bottom: 12px;"></div>
 
-    <div class="tools-bar">
-      <div id="toolsStatus">Loading...</div>
-      <div class="tools-actions">
-        <button type="button" id="toolsSelectAllBtn">Select all</button>
-        <button type="button" id="toolsSelectNoneBtn">Select none</button>
+        <form id="chatForm">
+          <input id="chatInput" name="message" placeholder="Type a message..." required />
+          <button type="submit">Send</button>
+        </form>
+
+        <div id="chatErr" class="err"></div>
       </div>
-    </div>
 
-    <div class="tools-sub">
-      Enabled: <span id="toolsEnabledCount">0</span>
-    </div>
+      <!--- Display available tools.--->
+      <div id="panelTools" class="card panel">
+        <h3>Available Tools</h3>
 
-    <ul id="toolsList" class="tools-list"></ul>
+        <div class="tools-bar">
+          <div id="toolsStatus">Loading...</div>
+          <div class="tools-actions">
+            <button type="button" id="toolsSelectAllBtn">Select all</button>
+            <button type="button" id="toolsSelectNoneBtn">Select none</button>
+          </div>
+        </div>
+
+        <div class="tools-sub">
+          Enabled: <span id="toolsEnabledCount">0</span>
+        </div>
+
+        <ul id="toolsList" class="tools-list"></ul>
+      </div>
+
+
+      <!-- Markdown parser -->
+      <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+      <!-- Sanitizer (recommended for safety) -->
+      <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.11/dist/purify.min.js"></script>
+
+      <!-- Application -->
+      <script src="/static/app.js"></script>
+    </main>
   </div>
-
-  <div class="card" id="adminUploadCard" style="display: none;">
-    <h3>Admin: Upload Documents</h3>
-
-    <form id="uploadForm">
-      <label for="uploadCorpusId">Corpus ID</label>
-      <input id="uploadCorpusId" name="corpus_id" type="text" required />
-
-      <label for="uploadUserId">User ID (optional)</label>
-      <input id="uploadUserId" name="user_id" type="text" placeholder="defaults to your user" />
-
-      <label for="uploadEmbeddingModel">Embedding model</label>
-      <select id="uploadEmbeddingModel" name="embedding_model"></select>
-
-      <label for="uploadChunkSize">Chunk size</label>
-      <input id="uploadChunkSize" name="chunk_size" type="number" value="1200" min="100" />
-
-      <label for="uploadChunkOverlap">Chunk overlap</label>
-      <input id="uploadChunkOverlap" name="chunk_overlap" type="number" value="200" min="0" />
-
-      <label for="uploadFile">File (.txt, .pdf, .pptx, .docx, .md, ...)</label>
-      <input id="uploadFile" name="file" type="file" accept=".txt,.md,.markdown,.pdf,.pptx,.docx,.xlsx,.xls,.csv,.json,.xml,.html,.htm,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required />
-
-      <button type="submit" id="uploadBtn">Upload</button>
-    </form>
-
-    <div id="uploadStatus" class="upload-status"></div>
-  </div>
-
-
-  <script src="/static/app.js"></script>
-
 </body>
 </html>

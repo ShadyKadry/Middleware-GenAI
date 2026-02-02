@@ -1,7 +1,27 @@
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+.hidden {   display: none !important; } /* prevents overwrites from panels when hidden */
+
+.layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+}
+
+.main {
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+}
+
 body {
   font-family: system-ui, sans-serif;
-  max-width: 600px;
-  margin: 40px auto;
+  margin: 40px;
+  max-width: none;
 }
 
 .card {
@@ -21,10 +41,9 @@ input[type="password"],
 input[type="email"],
 textarea,
 select,
-form button {
+button {
   width: 100%;
   padding: 10px;
-  margin-top: 8px;
 }
 
 input[type="checkbox"] {
@@ -50,6 +69,7 @@ input[type="checkbox"] {
   color: #b00;
 }
 
+/** - - - AVAILABLE MCP TOOLS/SERVERS - - - **/
 
 .tools-bar {
   display: flex;
@@ -67,6 +87,13 @@ input[type="checkbox"] {
   width: auto;
   margin-top: 0;
   padding: 8px 10px;
+  height: 44px;
+  border-radius: 10px;
+
+  border: 1px solid #ddd;
+  background: #f5f5f5;
+  box-shadow: none;
+  outline: none;
 }
 
 .tools-sub {
@@ -128,11 +155,279 @@ input[type="checkbox"] {
   font-weight: 600;
 }
 
-.chat-search-grid {
-  margin-top: 10px;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+/** - - - LOGIN PAGE - - - **/
+
+/* only the login page */
+body.login-page {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #f7f7f7; /* optional #f7f7f7*/
+}
+
+.login-card {
+  width: 60%;
+  max-width: 420px;
+  padding: 28px;
+}
+
+/* login form spacing */
+.login-page form {
+  display: flex;
+  flex-direction: column;
   gap: 12px;
 }
+
+.login-page input,
+.login-page button {
+  width: 100%;
+  padding: 10px;
+  font-size: 14px;
+}
+
+/** - - - SIDEBAR - - - **/
+
+.sidebar {
+  width: 240px;
+  position: sticky;
+  top: 16px;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.sidebar {
+  width: 240px;
+}
+
+.sidebar-actions button {
+  width: 100%;
+  padding: 10px;
+  margin-top: 8px;
+}
+
+.sidebar-actions button.active {
+  outline: 2px solid #999;
+}
+
+/** - - - ADMIN ONLY: UPLOAD DATA - - - **/
+
+/* only affects the upload form */
+#uploadForm {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* group label + control nicely */
+#uploadForm .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* put chunk size + overlap + file in one row */
+#uploadForm .upload-row {
+  display: grid;
+  grid-template-columns: 140px 140px 1fr;
+  gap: 14px;
+  align-items: end;
+}
+
+/* optional: keep the number inputs from looking huge */
+#uploadForm input[type="number"] {
+  width: 100%;
+  max-width: 140px;
+}
+
+/* file input tends to look odd with your global padding */
+#uploadForm input[type="file"] {
+  padding: 6px;
+}
+
+/** - - - ADMIN ONLY: CREATE USER - - - **/
+
+/* make the form a clean vertical stack */
+#createUserForm {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 900px;   /* keep it from stretching full page */
+}
+
+/* make all controls consistent */
+#createUserForm input,
+#createUserForm button {
+  width: 100%;
+}
+
+/* optional nicer proportions */
+#createUserForm input {
+  padding: 10px;
+}
+
+#createUserForm button {
+  padding: 10px;
+}
+
+/* inline label + select */
+.inline-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* don't stretch the select full width */
+.inline-field select {
+  width: auto;
+  min-width: 200px;
+}
+
+/* make label look like a form label */
+.inline-field label {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/** - - - AUTO SEARCH - - - **/
+
+/* panel normal flow */
+#panelAutoSearch {
+  margin-top: 10px;
+  display: block;
+}
+
+/* form layout: 2 columns overall */
+#chat-autosearch-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+/* corpus block full width */
+#chat-autosearch-form > div:first-child {
+  grid-column: 1 / -1;
+}
+
+/* make the second row full width AND split into 2 columns */
+#chat-autosearch-form > .chat-autosearch-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr 1fr; /* 50/50 */
+  gap: 12px;
+  align-items: end;
+}
+
+.chat-autosearch-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;   /* space between label and input */
+}
+
+/* make inputs/selects fill their grid cells */
+#chat-autosearch-form select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+
+  height: 44px;
+  padding: 0 44px 0 16px;   /* right padding for arrow */
+  font-size: 15px;
+  border-radius: 10px;
+
+  border: 1px solid #ddd;
+  background: #f3f3f3;      /* match your send button*/
+  box-shadow: none;
+  outline: none;
+}
+
+#chat-autosearch-form input {
+  height: 44px;
+  padding: 0 16px;
+  font-size: 14px;
+  border-radius: 10px;
+  width: 100%;
+  border: 1px solid #ddd;
+  box-shadow: none;
+  background: #fff;
+}
+
+#chat-autosearch-form input[type="number"] {
+  padding-right: 30px;   /* gives room for the spinner buttons */
+}
+
+#chat-autosearch-form :focus {
+  outline: none;
+  border-color: #999;
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.06);
+}
+
+/** - - - CHAT INTERFACE - - - **/
+
+/* Make the whole chat panel tall and column-based */
+#panelChat {
+  max-height: 50vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Make log fill remaining space */
+#chatLog {
+  flex: 1;
+  min-height: 0;             /* IMPORTANT: allows scrolling inside flex */
+  overflow-y: auto;
+  border: 1px solid #eee;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+  background: #fafafa;
+}
+
+/* Input row at the bottom */
+#chatForm {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Override global input/button margin-top */
+#chatForm input,
+#chatForm button {
+  margin-top: 0;
+}
+
+/* Input grows */
+#chatInput {
+  flex: 9;
+  padding: 14px 16px;   /* taller */
+  font-size: 15px;
+  border-radius: 10px;
+  width: auto;
+  border: 1px solid #ddd;
+  box-shadow: none;
+  background: #fff;
+}
+
+#chatInput:focus {
+  outline: none;
+  border-color: #999;
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.06);
+}
+
+#chatForm button {
+  flex: 1;
+  padding: 14px 18px;
+  border-radius: 10px;
+  width: auto;
+  box-shadow: none;
+  border: 1px solid #ddd;
+  background: #f3f3f3;
+}
+
+
 
 
