@@ -333,6 +333,117 @@ if (uploadForm) {
   });
 }
 
+function parseMultiValue(value) {
+  if (!value) return [];
+  return value
+    .split(/[;,]/)
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
+
+function parseArgs(value) {
+  if (!value) return [];
+  return value
+    .split(/\r?\n/)
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
+
+const registerForm = document.getElementById("registerNewMCPServer");
+if (registerForm) {
+  registerForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const status = document.getElementById("mcpRegisterStatus");
+    if (status) {
+      status.textContent = "";
+      status.className = "upload-status";
+    }
+
+    const name = document.getElementById("mcpName")?.value.trim();
+    const kind = document.getElementById("mcpKind")?.value || "remote_mcp";
+    const transport = document.getElementById("mcpTransport")?.value || "stdio";
+    const command = document.getElementById("mcpCommand")?.value.trim();
+    const args = parseArgs(document.getElementById("mcpArgs")?.value || "");
+    const serverUrl = document.getElementById("mcpServerUrl")?.value.trim();
+    const factory = document.getElementById("mcpFactory")?.value.trim();
+    const allowedUsers = parseMultiValue(document.getElementById("mcpAllowedUsers")?.value || "");
+    const requiredRoles = parseMultiValue(document.getElementById("mcpRequiredRoles")?.value || "");
+    const enabled = !!document.getElementById("mcpEnabled")?.checked;
+
+    if (!name) {
+      if (status) {
+        status.textContent = "Name is required.";
+        status.className = "upload-status err";
+      }
+      return;
+    }
+
+    const payload = {
+      name,
+      kind,
+      enabled,
+      allowed_users: allowedUsers,
+      required_roles: requiredRoles,
+    };
+
+    if (kind === "local_mcp_mock") {
+      if (!factory) {
+        if (status) {
+          status.textContent = "Factory is required for local_mcp_mock.";
+          status.className = "upload-status err";
+        }
+        return;
+      }
+      payload.factory = factory;
+    } else {
+      payload.transport = transport;
+      if (transport === "stdio") {
+        if (!command) {
+          if (status) {
+            status.textContent = "Command is required for stdio transport.";
+            status.className = "upload-status err";
+          }
+          return;
+        }
+        payload.command = command;
+        payload.args = args;
+      } else {
+        if (!serverUrl) {
+          if (status) {
+            status.textContent = "Server URL is required for sse/http transport.";
+            status.className = "upload-status err";
+          }
+          return;
+        }
+        payload.server_url = serverUrl;
+      }
+    }
+
+    const res = await fetch("/api/admin/mcp-servers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (status) {
+        status.textContent = data.detail || "Registration failed";
+        status.className = "upload-status err";
+      }
+      return;
+    }
+
+    if (status) {
+      status.textContent = `Registered ${data.backend?.name || name}. Restart or re-bootstrap chat to load new tools.`;
+      status.className = "upload-status ok";
+    }
+    registerForm.reset();
+    document.getElementById("mcpEnabled").checked = true;
+  });
+}
+
 // ---- create users (admin only) ----
 async function adminCreateUser({ username, password, role }) {
   const res = await fetch("/api/admin/users", {

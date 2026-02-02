@@ -104,8 +104,54 @@
         <h2>Register new MCP servers.</h2>
 
         <form id="registerNewMCPServer">
+          <label for="mcpName">Name:</label>
+          <input id="mcpName" name="name" type="text" placeholder="unique server name" required />
+
+          <label for="mcpKind">Kind:</label>
+          <select id="mcpKind" name="kind">
+            <option value="remote_mcp">remote_mcp</option>
+            <option value="local_mcp_mock">local_mcp_mock</option>
+          </select>
+
+          <label for="mcpTransport">Transport:</label>
+          <select id="mcpTransport" name="transport">
+            <option value="stdio">stdio</option>
+            <option value="sse">sse</option>
+            <option value="http">http</option>
+          </select>
+
+          <div class="field">
+            <label for="mcpCommand">Command (stdio):</label>
+            <input id="mcpCommand" name="command" type="text" placeholder="docker" />
+          </div>
+
+          <div class="field">
+            <label for="mcpArgs">Args (one per line):</label>
+            <textarea id="mcpArgs" name="args" rows="3" placeholder="run&#10;-i&#10;--rm&#10;mcp/your-server"></textarea>
+          </div>
+
+          <div class="field">
+            <label for="mcpServerUrl">Server URL (sse/http):</label>
+            <input id="mcpServerUrl" name="server_url" type="text" placeholder="https://example.com/sse" />
+          </div>
+
+          <label for="mcpFactory">Factory (local_mcp_mock):</label>
+          <input id="mcpFactory" name="factory" type="text" placeholder="jira" />
+
+          <label for="mcpAllowedUsers">Allowed users (optional, ; separated):</label>
+          <input id="mcpAllowedUsers" name="allowed_users" type="text" placeholder="user;test_user_1" />
+
+          <label for="mcpRequiredRoles">Required roles (optional, ; separated):</label>
+          <input id="mcpRequiredRoles" name="required_roles" type="text" placeholder="admin;user" />
+
+          <label class="inline-field">
+            <input id="mcpEnabled" name="enabled" type="checkbox" checked />
+            Enabled
+          </label>
+
           <button type="submit">Register</button>
         </form>
+        <div id="mcpRegisterStatus" class="upload-status"></div>
       </div>
 
 

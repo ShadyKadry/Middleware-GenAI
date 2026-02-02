@@ -4,16 +4,31 @@
       "name": "hr",
       "factory": "hr",
       "kind": "local_mcp_mock",
-      "required_roles": ["normal_user", "admin", "tester"],
-      "allowed_users": ["user", "test_user_1"],
+      "required_roles": [
+        "normal_user",
+        "admin",
+        "tester"
+      ],
+      "allowed_users": [
+        "user",
+        "test_user_1"
+      ],
       "enabled": true
     },
     {
       "name": "jira",
       "factory": "jira",
       "kind": "local_mcp_mock",
-      "required_roles": ["normal_user", "admin", "tester"],
-      "allowed_users": ["user", "user-17", "test_user_1"],
+      "required_roles": [
+        "normal_user",
+        "admin",
+        "tester"
+      ],
+      "allowed_users": [
+        "user",
+        "user-17",
+        "test_user_1"
+      ],
       "enabled": true
     },
     {
@@ -27,8 +42,13 @@
         "--rm",
         "mcp/youtube-transcript"
       ],
-      "required_roles": ["normal_user", "admin"],
-      "allowed_users": ["user"],
+      "required_roles": [
+        "normal_user",
+        "admin"
+      ],
+      "allowed_users": [
+        "user"
+      ],
       "enabled": true
     },
     {
@@ -42,8 +62,13 @@
         "--rm",
         "mcp/wikipedia-mcp"
       ],
-      "required_roles": ["normal_user", "admin"],
-      "allowed_users": ["user"],
+      "required_roles": [
+        "normal_user",
+        "admin"
+      ],
+      "allowed_users": [
+        "user"
+      ],
       "enabled": true
     },
     {
@@ -51,9 +76,37 @@
       "kind": "remote_mcp",
       "transport": "http",
       "server_url": "https://mcp.deepwiki.com/mcp",
-      "required_roles": ["normal_user", "admin", "tester"],
-      "allowed_users": ["user", "test_user_1"],
+      "required_roles": [
+        "normal_user",
+        "admin",
+        "tester"
+      ],
+      "allowed_users": [
+        "user",
+        "test_user_1"
+      ],
       "enabled": true
+    },
+    {
+      "name": "DuckDuckGo",
+      "kind": "remote_mcp",
+      "enabled": true,
+      "required_roles": [
+        "normal_user",
+        "admin"
+      ],
+      "allowed_users": [
+        "admin"
+      ],
+      "transport": "stdio",
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "mcp/duckduckgo"
+      ],
+      "env": {}
     }
   ]
 }
