@@ -107,6 +107,27 @@
         "mcp/duckduckgo"
       ],
       "env": {}
+    },
+    {
+      "name": "Time_Reference",
+      "kind": "remote_mcp",
+      "enabled": true,
+      "required_roles": [
+        "normal_user",
+        "admin"
+      ],
+      "allowed_users": [
+        "admin"
+      ],
+      "transport": "stdio",
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "mcp/time"
+      ],
+      "env": {}
     }
   ]
 }
