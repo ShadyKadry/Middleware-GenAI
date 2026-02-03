@@ -349,6 +349,56 @@ function parseArgs(value) {
     .filter(Boolean);
 }
 
+function parseHeaders(value) {
+  const trimmed = (value || "").trim();
+  if (!trimmed) return { headers: {}, error: null };
+
+  if (trimmed.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return { headers: {}, error: "Headers JSON must be an object." };
+      }
+      return { headers: parsed, error: null };
+    } catch (err) {
+      return { headers: {}, error: "Headers JSON is invalid." };
+    }
+  }
+
+  const headers = {};
+  const lines = trimmed.split(/\r?\n/);
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const idx = line.indexOf(":");
+    if (idx === -1) {
+      return { headers: {}, error: "Headers must be in 'Key: Value' format." };
+    }
+    const key = line.slice(0, idx).trim();
+    const value = line.slice(idx + 1).trim();
+    if (!key || !value) {
+      return { headers: {}, error: "Headers must be in 'Key: Value' format." };
+    }
+    headers[key] = value;
+  }
+
+  return { headers, error: null };
+}
+
+function updateMcpTransportFields() {
+  const transport = document.getElementById("mcpTransport")?.value || "stdio";
+  const stdioFields = document.getElementById("mcpStdioFields");
+  const remoteFields = document.getElementById("mcpRemoteFields");
+  const isStdio = transport === "stdio";
+  if (stdioFields) stdioFields.classList.toggle("hidden", !isStdio);
+  if (remoteFields) remoteFields.classList.toggle("hidden", isStdio);
+}
+
+const mcpTransportSelect = document.getElementById("mcpTransport");
+if (mcpTransportSelect) {
+  mcpTransportSelect.addEventListener("change", updateMcpTransportFields);
+  updateMcpTransportFields();
+}
+
 const registerForm = document.getElementById("registerNewMCPServer");
 if (registerForm) {
   registerForm.addEventListener("submit", async (e) => {
@@ -361,12 +411,13 @@ if (registerForm) {
     }
 
     const name = document.getElementById("mcpName")?.value.trim();
-    const kind = document.getElementById("mcpKind")?.value || "remote_mcp";
     const transport = document.getElementById("mcpTransport")?.value || "stdio";
     const command = document.getElementById("mcpCommand")?.value.trim();
     const args = parseArgs(document.getElementById("mcpArgs")?.value || "");
     const serverUrl = document.getElementById("mcpServerUrl")?.value.trim();
-    const factory = document.getElementById("mcpFactory")?.value.trim();
+    const { headers, error: headersError } = parseHeaders(
+      document.getElementById("mcpHeaders")?.value || ""
+    );
     const allowedUsers = parseMultiValue(document.getElementById("mcpAllowedUsers")?.value || "");
     const requiredRoles = parseMultiValue(document.getElementById("mcpRequiredRoles")?.value || "");
     const enabled = !!document.getElementById("mcpEnabled")?.checked;
@@ -381,42 +432,41 @@ if (registerForm) {
 
     const payload = {
       name,
-      kind,
       enabled,
       allowed_users: allowedUsers,
       required_roles: requiredRoles,
+      transport,
     };
 
-    if (kind === "local_mcp_mock") {
-      if (!factory) {
+    if (headersError) {
+      if (status) {
+        status.textContent = headersError;
+        status.className = "upload-status err";
+      }
+      return;
+    }
+
+    if (transport === "stdio") {
+      if (!command) {
         if (status) {
-          status.textContent = "Factory is required for local_mcp_mock.";
+          status.textContent = "Command is required for stdio transport.";
           status.className = "upload-status err";
         }
         return;
       }
-      payload.factory = factory;
+      payload.command = command;
+      payload.args = args;
     } else {
-      payload.transport = transport;
-      if (transport === "stdio") {
-        if (!command) {
-          if (status) {
-            status.textContent = "Command is required for stdio transport.";
-            status.className = "upload-status err";
-          }
-          return;
+      if (!serverUrl) {
+        if (status) {
+          status.textContent = "Server URL is required for sse/http transport.";
+          status.className = "upload-status err";
         }
-        payload.command = command;
-        payload.args = args;
-      } else {
-        if (!serverUrl) {
-          if (status) {
-            status.textContent = "Server URL is required for sse/http transport.";
-            status.className = "upload-status err";
-          }
-          return;
-        }
-        payload.server_url = serverUrl;
+        return;
+      }
+      payload.server_url = serverUrl;
+      if (Object.keys(headers).length) {
+        payload.headers = headers;
       }
     }
 
@@ -440,6 +490,7 @@ if (registerForm) {
       status.className = "upload-status ok";
     }
     registerForm.reset();
+    updateMcpTransportFields();
     document.getElementById("mcpEnabled").checked = true;
   });
 }

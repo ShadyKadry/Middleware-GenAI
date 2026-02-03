@@ -160,8 +160,8 @@ def normalize_backend_def(payload: Dict[str, Any]) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail="name is required")
 
     kind = payload.get("kind") or "remote_mcp"
-    if kind not in {"remote_mcp", "local_mcp_mock"}:
-        raise HTTPException(status_code=400, detail="Unsupported kind")
+    if kind != "remote_mcp":
+        raise HTTPException(status_code=400, detail="Only remote_mcp is supported")
 
     backend: Dict[str, Any] = {
         "name": name.strip(),
@@ -170,13 +170,6 @@ def normalize_backend_def(payload: Dict[str, Any]) -> Dict[str, Any]:
         "required_roles": _ensure_list(payload.get("required_roles")),
         "allowed_users": _ensure_list(payload.get("allowed_users")),
     }
-
-    if kind == "local_mcp_mock":
-        factory = payload.get("factory")
-        if not factory:
-            raise HTTPException(status_code=400, detail="factory is required for local_mcp_mock")
-        backend["factory"] = str(factory)
-        return backend
 
     transport = payload.get("transport") or "stdio"
     if transport not in {"stdio", "sse", "http"}:
