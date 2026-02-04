@@ -9,6 +9,25 @@ let selectedTools = new Set();
   --- # HELPER FUNCTIONS # ---
  */
 
+function appendMessage(role, text) {
+  const chatLog = document.getElementById("chatLog");
+  if (!chatLog) return;
+
+  const row = document.createElement("div");
+  row.className = `chat-msg ${role}`;
+
+  if (role === "bot") {
+    const html = DOMPurify.sanitize(marked.parse(text || ""));
+    row.innerHTML = html;
+  } else {
+    row.textContent = text || "";
+  }
+
+  chatLog.appendChild(row);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+
 /* TODO once normal users can be created as well. */
 function showAdminPanel(which) {
   const upload = document.getElementById("adminUploadCard");
@@ -28,6 +47,8 @@ async function loadMe() {
 
   CURRENT_USER = data.user;
   CURRENT_ROLE = data.role;
+  const sidebarRole = document.getElementById("sidebarRole");
+  if (sidebarRole) sidebarRole.textContent = `Role: ${CURRENT_ROLE || ""}`;
 
   const meBox = document.getElementById("meBox");
   if (meBox) meBox.textContent = JSON.stringify(data, null, 2);
@@ -536,7 +557,7 @@ if (chatForm) {
       return;
     }
 
-    chatLog.textContent += `You: ${message}\n`;
+    appendMessage("user", message);
     chatInput.value = "";
 
     const res = await fetch("/api/chat", {
@@ -560,7 +581,7 @@ if (chatForm) {
     }
 
     const data = await res.json();
-    chatLog.textContent += `Bot: ${data.text}\n`;
+    appendMessage("bot", data.text);
   });
 }
 

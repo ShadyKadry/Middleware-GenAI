@@ -10,8 +10,8 @@
 
     <!-- Sidebar (only visible for admins) TODO make available for all. -->
     <aside id="adminSidebar" class="sidebar hidden">
-      <h2>Welcome, {{ user }}! </h2>
-      <h3>Role: {{ CURRENT_ROLE }} </h3>
+      <h2>Welcome, <span id="sidebarUser">{{ user }}</span>!</h2>
+      <div id="sidebarRole" class="sidebar-role"></div>
       <button id="logoutBtn">Log out</button>
 
 
@@ -188,7 +188,7 @@
       <div id="panelChat" class="card panel">
         <h3>Chat</h3>
 
-        <div id="chatLog" style="white-space: pre-wrap; margin-bottom: 12px;"></div>
+        <div id="chatLog" class="chat-log"></div>
 
         <form id="chatForm">
           <input id="chatInput" name="message" placeholder="Type a message..." required />

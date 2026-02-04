@@ -213,6 +213,13 @@ body.login-page {
   outline: 2px solid #999;
 }
 
+.sidebar-role {
+  margin-top: 4px;
+  opacity: 0.85;
+  font-size: 0.95em;
+}
+
+
 /** - - - ADMIN ONLY: UPLOAD DATA - - - **/
 
 /* only affects the upload form */
@@ -387,6 +394,13 @@ body.login-page {
 
 /** - - - CHAT INTERFACE - - - **/
 
+.chat-msg { padding: 10px 12px; border-radius: 12px; margin: 8px 0; max-width: 85%; }
+.chat-msg.user { margin-left: auto; background: #e9eefc; }
+.chat-msg.bot { margin-right: auto; background: #f3f3f3; }
+.chat-msg.bot p { margin: 0 0 8px 0; }
+.chat-msg.bot p:last-child { margin-bottom: 0; }
+
+
 /* Make the whole chat panel tall and column-based */
 #panelChat {
   max-height: 50vh;
@@ -445,6 +459,51 @@ body.login-page {
   box-shadow: none;
   border: 1px solid #ddd;
   background: #f3f3f3;
+}
+
+/* message bubbles inside #chatLog */
+.chat-log {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.msg {
+  display: flex;
+}
+
+.msg-user {
+  justify-content: flex-end;
+}
+
+.msg-assistant {
+  justify-content: flex-start;
+}
+
+.msg-bubble {
+  max-width: 75%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.msg-user .msg-bubble {
+  background: #2b2b2b;
+  color: #fff;
+}
+
+.msg-assistant .msg-bubble {
+  background: #f2f2f2;
+  color: #000;
+}
+
+/* make markdown code blocks readable */
+.msg-assistant .msg-bubble pre {
+  overflow-x: auto;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(0,0,0,0.06);
 }
 
 
