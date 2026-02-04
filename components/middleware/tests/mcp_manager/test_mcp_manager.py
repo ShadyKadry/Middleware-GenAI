@@ -21,7 +21,7 @@ class TestMCPManager(unittest.IsolatedAsyncioTestCase):
 
     async def test_mcp_server_retrieval(self) -> None:
         """
-        Assumes that the backends.json is used for server access config.
+        Assumes that the database in 'mcp_server_loader.py' is used for server access config.
         """
         # establish connection to the principal-accessible MCP servers
         backends: List[BackendServer] = await get_mcp_servers(self.principal)
