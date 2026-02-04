@@ -1,9 +1,8 @@
 import unittest
 from typing import List
 
-from mcp_manager.data.tool_models import BackendServer, RemoteBackendServer
+from mcp_manager.data.tool_models import BackendServer
 from mcp_manager.mcp_manager import get_mcp_servers
-from mcp_manager.mcp_server_registry import backend_registry
 
 
 """
@@ -18,14 +17,7 @@ IMPORTANT FOR SUCCESSFUL EXECUTION:
 class TestMCPManager(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         # create authenticating principal
-        self.principal = {
-        "user_id": "user", #"test_user_1",
-        "role": "admin",
-        "token": "1234",
-        }
-
-        # load MCP server registry
-        backend_registry.load_config_from_disk()
+        self.principal = {"user_id": "Admin", "role": "Super-Admin"}
 
     async def test_mcp_server_retrieval(self) -> None:
         """
@@ -38,17 +30,13 @@ class TestMCPManager(unittest.IsolatedAsyncioTestCase):
         available_servers = [backend.server_id for backend in backends]
         available_tools = [tool for backend in backends for tool in backend.get_tools()]
 
-        # close connections to the servers
-        for backend in backends:
-            if isinstance(backend, RemoteBackendServer):
-                await backend.close()
-
         # verify
-        self.assertEqual(len(available_servers), 3)
-        self.assertIn("hr", available_servers)
-        self.assertIn("jira", available_servers)
+        self.assertEqual(len(available_servers), 4)
         self.assertIn("deepwiki", available_servers)
-        self.assertEqual(len(available_tools), 5)  # 1x HR / 1x Jira / 3x deepwiki
+        self.assertIn("document_retrieval", available_servers)
+        self.assertIn("wikipedia_mcp", available_servers)
+        self.assertIn("youtube_transcript", available_servers)
+        self.assertEqual(len(available_tools), 19)  # 11x wikipedia_mcp / 2x document_retrieval / 3x deepwiki / 3x youtube_transcripts
 
 
 if __name__ == "__main__":

@@ -69,7 +69,10 @@ input[type="checkbox"] {
   color: #b00;
 }
 
+
+/** - - - - - - - - - - - - - - - - - - - - **/
 /** - - - AVAILABLE MCP TOOLS/SERVERS - - - **/
+/** - - - - - - - - - - - - - - - - - - - - **/
 
 .tools-bar {
   display: flex;
@@ -94,6 +97,16 @@ input[type="checkbox"] {
   background: #f5f5f5;
   box-shadow: none;
   outline: none;
+  cursor: pointer;
+}
+
+/* hover/active feedback button */
+.tools-actions button:hover {
+  filter: brightness(0.98);
+}
+
+.tools-actions button:active {
+  filter: brightness(0.95);
 }
 
 .tools-sub {
@@ -155,7 +168,10 @@ input[type="checkbox"] {
   font-weight: 600;
 }
 
+
+/** - - - - - - - - - - - -**/
 /** - - - LOGIN PAGE - - - **/
+/** - - - - - - - - - - - -**/
 
 /* only the login page */
 body.login-page {
@@ -164,7 +180,7 @@ body.login-page {
   display: flex;
   justify-content: center;
   align-items: center;
-  background: #f7f7f7; /* optional #f7f7f7*/
+  background: #f7f7f7;
 }
 
 .login-card {
@@ -187,7 +203,10 @@ body.login-page {
   font-size: 14px;
 }
 
+
+/** - - - - - - - - - - **/
 /** - - - SIDEBAR - - - **/
+/** - - - - - - - - - - **/
 
 .sidebar {
   width: 240px;
@@ -196,59 +215,156 @@ body.login-page {
   padding: 12px;
   border: 1px solid #ddd;
   border-radius: 10px;
-  background: #fff;
+  background: #fff; /*#fff;*/
 }
 
-.sidebar {
-  width: 240px;
+.sidebar-divider {
+  border: 0;
+  height: 1px;
+  background: #e5e5e5;   /* subtle line */
+  margin: 14px 0;        /* spacing above/below */
 }
 
-.sidebar-actions button {
-  width: 100%;
-  padding: 10px;
+/* sidebar buttons = chat/upload button */
+.sidebar-actions button,
+#sidebar-actions button {
+  width: calc(100% + 25px); /* grow into left padding */
+  margin-left: -25px;
+  /*width: 100%;*/
+  padding: 11px 9px;      /* match chat button spacing */
   margin-top: 8px;
+
+  border-radius: 10px;
+  border: 1px solid #ddd;
+  background: #f3f3f3;
+  box-shadow: none;
+
+  font: inherit;
+  cursor: pointer;
+  text-align: left;        /* optional: feels more “sidebar” */
 }
 
-.sidebar-actions button.active {
-  outline: 2px solid #999;
+/* same focus ring you use elsewhere */
+.sidebar-actions button:focus,
+#sidebar-actions button:focus {
+  outline: none;
+  border-color: #999;
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.06);
 }
 
+/* hover/active feedback like your upload button */
+.sidebar-actions button:hover,
+#sidebar-actions button:hover {
+  filter: brightness(0.98);
+}
+.sidebar-actions button:active,
+#sidebar-actions button:active {
+  filter: brightness(0.95);
+}
+
+/* active state: make it look "selected" but consistent */
+.sidebar-actions button.active,
+#sidebar-actions button.active {
+  border-color: #999;
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.06);
+  background: #ededed; /* slightly different from normal */
+}
+
+
+/** - - - - - - - - - - - - - - - - - - **/
 /** - - - ADMIN ONLY: UPLOAD DATA - - - **/
+/** - - - - - - - - - - - - - - - - - - **/
 
 /* only affects the upload form */
 #uploadForm {
   display: flex;
   flex-direction: column;
   gap: 14px;
+
 }
 
-/* group label + control nicely */
 #uploadForm .field {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-/* put chunk size + overlap + file in one row */
+/* make the row responsive and less "squeezed" */
 #uploadForm .upload-row {
   display: grid;
-  grid-template-columns: 140px 140px 1fr;
+  grid-template-columns: minmax(160px, 220px) minmax(160px, 220px) 1fr;
   gap: 14px;
   align-items: end;
 }
 
-/* optional: keep the number inputs from looking huge */
-#uploadForm input[type="number"] {
-  width: 100%;
-  max-width: 140px;
-}
-
-/* file input tends to look odd with your global padding */
+/* file input should fill the grid cell */
 #uploadForm input[type="file"] {
+  width: 100%;
   padding: 6px;
 }
 
+/* stack the row on small screens */
+@media (max-width: 720px) {
+  #uploadForm .upload-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Scope everything to the upload panel */
+#panelDataUpload #uploadForm input,
+#panelDataUpload #uploadForm select,
+#panelDataUpload #uploadForm button {
+  font: inherit;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+/* Inputs + select look like your chat input */
+#panelDataUpload #uploadForm input[type="text"],
+#panelDataUpload #uploadForm input[type="number"],
+#panelDataUpload #uploadForm select {
+  padding: 14px 18px;
+  background: #fff;
+  height: 40px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Focus style copied from #chatInput:focus */
+#panelDataUpload #uploadForm input[type="text"]:focus,
+#panelDataUpload #uploadForm input[type="number"]:focus,
+#panelDataUpload #uploadForm select:focus,
+#panelDataUpload #uploadForm input[type="file"]:focus,
+#panelDataUpload #uploadForm button:focus {
+  outline: none;
+  border-color: #999;
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.06);
+}
+
+/* Button style copied from #chatForm button */
+#panelDataUpload #uploadBtn {
+  padding: 14px 18px;
+  border-radius: 10px;
+  width: auto;
+  box-shadow: none;
+  border: 1px solid #ddd;
+  background: #f3f3f3;
+  cursor: pointer;
+}
+
+#panelDataUpload #uploadBtn:hover {
+  filter: brightness(0.98);
+}
+
+#panelDataUpload #uploadBtn:active {
+  filter: brightness(0.95);
+}
+
+
+/** - - - - - - - - - - - - - - - - - - **/
 /** - - - ADMIN ONLY: CREATE USER - - - **/
+/** - - - - - - - - - - - - - - - - - - **/
 
 /* make the form a clean vertical stack */
 #createUserForm {
@@ -292,7 +408,85 @@ body.login-page {
   white-space: nowrap;
 }
 
+/* ---- tools fieldset container ---- */
+#panelUserCreation fieldset {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+}
+
+/* legend title */
+#panelUserCreation legend {
+  font-weight: 600;
+  padding: 0 6px;
+}
+
+
+/* ---- checkbox grid ---- */
+/* Grid container: make items align from the left */
+.cutools-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px 16px;
+
+  justify-items: start;   /* IMPORTANT: don't center items in their cells */
+  align-items: start;
+
+  text-align: left;       /* IMPORTANT: prevent inherited center alignment */
+
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 6px 2px;
+}
+
+/* Each row: checkbox + text aligned nicely */
+.cutool-item {
+  display: flex;   /* inline-flex works nicely inside grid */
+  align-items: center;
+  justify-content: flex-start; /* IMPORTANT */
+  gap: 10px;
+
+  width: 100%;            /* occupy full cell width */
+  white-space: normal;    /* optional: keep one line */
+}
+
+/* Checkbox: stop it from affecting baseline/spacing */
+.cutool-item input[type="checkbox"] {
+  margin: 0;
+  align-self: center;
+  /*flex: 0 0 auto;
+  vertical-align: middle;*/
+}
+
+/* Text: consistent baseline */
+.cutool-item span {
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+/* hover effect */
+.cutool-item:hover {
+  background: #f3f4f6;
+}
+
+/* checkbox sizing */
+.cutool-item input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+
+/* muted text style (for "No tools available.") */
+.muted {
+  color: #888;
+  font-style: italic;
+}
+
+
+/** - - - - - - - - - - - - **/
 /** - - - AUTO SEARCH - - - **/
+/** - - - - - - - - - - - - **/
 
 /* panel normal flow */
 #panelAutoSearch {
@@ -366,7 +560,9 @@ body.login-page {
   box-shadow: 0 0 0 2px rgba(0,0,0,0.06);
 }
 
+/** - - - - - - - - - - - - -  **/
 /** - - - CHAT INTERFACE - - - **/
+/** - - - - - - - - - - - - -  **/
 
 /* Make the whole chat panel tall and column-based */
 #panelChat {
@@ -426,6 +622,16 @@ body.login-page {
   box-shadow: none;
   border: 1px solid #ddd;
   background: #f3f3f3;
+  cursor: pointer;
+}
+
+/* hover/active feedback button */
+#chatForm button:hover {
+  filter: brightness(0.98);
+}
+
+#chatForm button:active {
+  filter: brightness(0.95);
 }
 
 

@@ -1,8 +1,6 @@
 import json
-import logging
 import os
 import secrets
-import sys
 import tempfile
 from pathlib import Path
 from typing import List, Any, Dict, Optional, Set
@@ -23,11 +21,10 @@ from google.genai.types import Tool
 from passlib.context import CryptContext
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .mcp_client import MCPClient
-from .db.session import engine, Base, get_db
-from .db.models import User
+
 from .auth.jwt_auth import (
     create_token,
     decode_token,
@@ -38,11 +35,16 @@ from .auth.jwt_auth import (
     ACCESS_MINUTES,
     REFRESH_DAYS,
 )
+from .data.roles import AccessRoles
+from .db.session import get_db
+from .db.orm_models import Corpus, MCPServer, Role, User
+from .mcp_client import MCPClient
+
 
 # gateway project root
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# todo: where should ongoing sessions be saved? DB? in code is suboptimal security-wise...
+# todo: where should ongoing sessions be saved? DB? in code is suboptimal security-wise... feature: move to DB and persist. also
 CHAT_SESSIONS: Dict[str, Dict[str, Any]] = {}
 
 # minimal server-side invalidation for refresh tokens (iteration 1)
@@ -50,7 +52,7 @@ REVOKED_REFRESH_TOKENS: Set[str] = set()
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# embedding models exposed in the admin UI
+# embedding models exposed in the admin UI TODO not in all?
 EMBEDDING_MODELS = [
     {"id": "gemini-embedding-001", "label": "Gemini embedding-001"},
     {"id": "stub-256", "label": "Stub (deterministic, 256d)"},
@@ -82,7 +84,8 @@ class ChatIn(BaseModel):
 class AdminCreateUserIn(BaseModel):
     username: str
     password: str
-    role: str = "user"  # "user" or "admin"
+    role: str
+    tools: List[str]
 
 
 def filter_tools(all_tools, allowed_names: set[str]):
@@ -110,7 +113,8 @@ def _principal_from_request_optional(request: Request) -> Optional[dict]:
 
 
 def _require_admin(principal: dict) -> None:
-    if principal.get("role") != "admin":
+    logged_in_user_role = principal.get("role").lower()
+    if logged_in_user_role != "admin" and logged_in_user_role != "super-admin":
         raise HTTPException(status_code=403, detail="Admin only")
 
 
@@ -225,12 +229,6 @@ app.mount(
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 
-@app.on_event("startup")
-async def on_startup():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-
 @app.on_event("shutdown")
 async def on_shutdown():
     # cleanup MCP subprocess sessions
@@ -238,7 +236,7 @@ async def on_shutdown():
         mcp = sess.get("mcp")
         if mcp:
             try:
-                await mcp.cleanup()
+                await mcp.cleanup()  # TODO works?
             except Exception:
                 pass
     CHAT_SESSIONS.clear()
@@ -286,21 +284,23 @@ async def auth_login(
         raise HTTPException(status_code=401, detail="Not allowed")
     if not pwd_context.verify(password, user.password_hash):
         raise HTTPException(status_code=401, detail="Wrong password")
+    role = user.roles[0].name
 
     access = create_token(
         subject=user.username,
-        role=user.role,
+        role=role,  # TODO adjust if user's can have multiple roles
         expires_delta=__import__("datetime").timedelta(minutes=ACCESS_MINUTES),
         token_type="access",
     )
+
     refresh = create_token(
         subject=user.username,
-        role=user.role,
+        role=role,  # TODO adjust if user's can have multiple roles
         expires_delta=__import__("datetime").timedelta(days=REFRESH_DAYS),
         token_type="refresh",
     )
 
-    resp = JSONResponse({"ok": True})
+    resp = JSONResponse({"ok": True, "user": username, "role": role})
     set_auth_cookies(resp, access, refresh)
     return resp
 
@@ -333,7 +333,7 @@ def auth_refresh(refresh_token: str = Depends(get_refresh_cookie)):
     # rotate refresh: revoke old, set new
     REVOKED_REFRESH_TOKENS.add(refresh_token)
 
-    resp = JSONResponse({"ok": True})
+    resp = JSONResponse({"ok": True, "user": username, "role": role})
     set_auth_cookies(resp, access, new_refresh)
     return resp
 
@@ -371,7 +371,7 @@ def me_alias(principal: dict = Depends(current_principal)):
 #######################################
 ### ---> Admin API                  ###
 #######################################
-@app.post("/api/admin/users")
+@app.post("/api/admin/user/creation")
 async def admin_create_user(
     payload: AdminCreateUserIn,
     principal: dict = Depends(current_principal),
@@ -379,29 +379,57 @@ async def admin_create_user(
 ):
     _require_admin(principal)
 
-    role = payload.role.strip().lower()
-    if role not in {"user", "admin"}:
-        raise HTTPException(status_code=400, detail="role must be 'user' or 'admin'")
+    role = payload.role.strip()
+    allowed_roles = {r.value for r in AccessRoles}
+    if role not in allowed_roles:
+        raise HTTPException(status_code=400, detail=f"Role must be one of: {', '.join(sorted(allowed_roles))}")
 
     username = payload.username.strip()
     if not username:
-        raise HTTPException(status_code=400, detail="username required")
+        raise HTTPException(status_code=400, detail="Username required.")
     if not payload.password:
-        raise HTTPException(status_code=400, detail="password required")
+        raise HTTPException(status_code=400, detail="Password required.")
 
     existing = await _get_user_by_username(db, username)
     if existing:
-        raise HTTPException(status_code=409, detail="username already exists")
+        raise HTTPException(status_code=409, detail="Username already exists.")
 
+    # 1.) load the corresponding 'roles' row
+    role_obj = await db.scalar(select(Role).where(Role.name == role))
+    if not role_obj:
+        raise HTTPException(status_code=500, detail=f"Role '{role}' not found in roles table.")
+
+    # 2.) create new entry in 'users' table
     user = User(
         username=username,
         password_hash=pwd_context.hash(payload.password),
-        role=role,
+        roles=[role_obj]
     )
-    db.add(user)
-    await db.commit()
 
-    return {"ok": True, "username": username, "role": role}
+    # 3.) add selected MCP servers to 'mcp_servers_user_access' table
+    tools = getattr(payload, "tools", None)
+    if tools:
+        server_names = [t.strip() for t in tools if t and t.strip()]
+        if server_names:
+            servers = (await db.scalars(
+                select(MCPServer).where(MCPServer.name.in_(server_names))
+            )).all()
+            found = {s.name for s in servers}
+
+            missing = sorted(set(server_names) - found)
+            if missing:
+                raise HTTPException(status_code=400, detail=f"Unknown MCP servers: {', '.join(missing)}")
+            user.mcp_servers.extend(servers)
+
+    db.add(user)
+
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Username already exists.")
+
+    return {"ok": True, "username": username, "role": role} # TODO return roles instead
 
 
 @app.get("/api/admin/embedding-models")
