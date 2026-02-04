@@ -8,6 +8,10 @@ from google import genai
 
 import numpy as np
 
+from db.pgvector_store import PgVectorStore
+from db.qdrant_store import QdrantVectorStore
+from db.vector_store import VectorStore
+
 
 # - - - - - - - - - - - - - - - - - - - - - Abstract class - - - - - - - - - - - - - - - - - - - - -
 class EmbeddingModel(Protocol):
@@ -75,7 +79,7 @@ class StubEmbeddingModel(EmbeddingModel):
         return out
 
 
-# Google Gemini embedding model - (IGNORED FOR NOW & OUT-COMMENTED IMPL NOT TESTED)
+# Google Gemini embedding model
 class GeminiEmbeddingModel(EmbeddingModel):
     def __init__(self, model_name: str = "gemini-embedding-001"):
         load_dotenv()
@@ -94,14 +98,6 @@ class GeminiEmbeddingModel(EmbeddingModel):
         return self._dim
 
     def embed(self, texts: Sequence[str]) -> List[List[float]]:
-        # adjust to the exact Gemini SDK API you’re using
-        # response = self._client.embed_content(
-        #     model=self._model_name,
-        #     content=list(texts),
-        # )
-        #
-        # # Example if response.embeddings is a list of embeddings:
-        # return [emb.values for emb in response.embeddings]
         if not texts:
             return []
 
@@ -155,7 +151,7 @@ def _extract_embedding_values(obj) -> Optional[List[float]]:
 
     return None
 
-
+# - - - embedding models
 DEFAULT_EMBEDDING_MODEL_ID = "gemini-embedding-001"
 
 _MODEL_REGISTRY: Dict[str, Callable[[], EmbeddingModel]] = {
@@ -178,3 +174,27 @@ def get_embedding_model(model_id: str) -> EmbeddingModel:
         _MODEL_CACHE[model_id] = _MODEL_REGISTRY[model_id]()
 
     return _MODEL_CACHE[model_id]
+
+# - - - databases
+DEFAULT_DATABASE = "Qdrant"
+
+_DB_REGISTRY: Dict[str, Callable[[], VectorStore]] = {
+    "Qdrant": lambda: QdrantVectorStore(),
+    "Pgvector": lambda: PgVectorStore(),
+}
+
+_DB_CACHE: Dict[str, VectorStore] = {}
+
+
+def list_databases() -> List[str]:
+    return list(_DB_REGISTRY.keys())
+
+
+def get_database(database_name: str) -> VectorStore:
+    if database_name not in _DB_REGISTRY:
+        raise ValueError(f"Unknown embedding model: {database_name}")
+
+    if database_name not in _DB_CACHE:
+        _DB_CACHE[database_name] = _DB_REGISTRY[database_name]()
+
+    return _DB_CACHE[database_name]

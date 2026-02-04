@@ -1,13 +1,17 @@
+const CHAT_SEARCH_STORAGE_KEY = "chat_presearch_v1";
+const SELECTED_TOOLS_STORAGE_KEY = "enabled_tools_v1";
+const AVAILABLE_TOOLS_STORAGE_KEY = "available_tools_v1";
+
+let selectedTools = new Set();
+let availableTools = new Set();
 let CURRENT_USER = null;
 let CURRENT_ROLE = null;
 let CHAT_SESSION_ID = null;
-const TOOLS_STORAGE_KEY = "enabled_tools_v1";
-const CHAT_SEARCH_STORAGE_KEY = "chat_presearch_v1";
-let selectedTools = new Set();
 
 /*
   --- # HELPER FUNCTIONS # ---
  */
+
 
 function appendMessage(role, text) {
   const chatLog = document.getElementById("chatLog");
@@ -27,17 +31,43 @@ function appendMessage(role, text) {
   chatLog.scrollTop = chatLog.scrollHeight;
 }
 
+const ADMIN_PANELS = [
+  "panelDataUpload",
+  "panelUserCreation",
+  "panelServerRegistration",
+];
 
-/* TODO once normal users can be created as well. */
-function showAdminPanel(which) {
-  const upload = document.getElementById("adminUploadCard");
-  const create = document.getElementById("createUserPanel");
+/*** - - - SHOW SIDEBAR DYNAMICALLY BASED ON USER-ROLE - - - ***/
+function showPanel(targets) {
+  document.querySelectorAll(".panel").forEach(p => p.classList.add("hidden"));
 
-  if (upload) upload.classList.toggle("hidden", which !== "upload");
-  if (create) create.classList.toggle("hidden", which !== "createUser");
+  targets.split(",").forEach(id => {
+    const el = document.getElementById(id.trim());
+    if (el) el.classList.remove("hidden");
+  });
 }
 
-/* Loads user credentials and displays sidebar. */
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-target]");
+  if (!btn) return;
+
+  const targets = btn.dataset.target;
+  const isAdmin = ["admin", "super-admin"].includes(CURRENT_ROLE);
+  if (!isAdmin) {
+    const wantsAdminPanel = targets
+      .split(",")
+      .map(s => s.trim())
+      .some(id => ADMIN_PANELS.includes(id));
+    if (wantsAdminPanel) return;
+  }
+
+  document.querySelectorAll("#sidebar-actions button")
+    .forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+
+  showPanel(btn.dataset.target);
+});
+
 async function loadMe() {
   const res = await fetch("/api/me");
   if (!res.ok) return;
@@ -45,29 +75,39 @@ async function loadMe() {
   const data = await res.json().catch(() => null);
   if (!data) return;
 
-  CURRENT_USER = data.user;
-  CURRENT_ROLE = data.role;
+  CURRENT_USER = data.user.toLowerCase();
+  CURRENT_ROLE = data.role.toLowerCase();
   const sidebarRole = document.getElementById("sidebarRole");
-  if (sidebarRole) sidebarRole.textContent = `Role: ${CURRENT_ROLE || ""}`;
+  if (sidebarRole) sidebarRole.textContent = `Role: ${data.role || ""}`;
 
-  const meBox = document.getElementById("meBox");
-  if (meBox) meBox.textContent = JSON.stringify(data, null, 2);
 
-  const adminSidebar = document.getElementById("adminSidebar");
-  const isAdmin = data.role === "admin";
-  if (adminSidebar) adminSidebar.classList.toggle("hidden", !isAdmin);
+  const sidebar = document.getElementById("showSidebar");
+  if (sidebar) sidebar.classList.remove("hidden");
 
+  const isAdmin = CURRENT_ROLE === "admin" || CURRENT_ROLE === "super-admin";
+
+  // hide/show admin-only BUTTONS
+  document.querySelectorAll(".admin-only").forEach(el =>
+    el.classList.toggle("hidden", !isAdmin)
+  );
+
+  // hide admin-only PANELS too (defense in depth)
   if (!isAdmin) {
-    showAdminPanel("none");
-    return;
+    ADMIN_PANELS.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.add("hidden");
+    });
+  } else { renderToolsCheckboxes(); }
+
+  // everyone starts here
+  showPanel("panelAutoSearch,panelChat,panelTools");
+
+  if (isAdmin) {
+    await loadEmbeddingModels();
   }
-
-  // default panel
-  showAdminPanel("upload"); // or "createUser"
-
-  await loadEmbeddingModels();
 }
 
+/*** - - - LOGIN - - - ***/
 const form = document.getElementById("loginForm");
 if (form) {
   form.addEventListener("submit", async (e) => {
@@ -92,17 +132,31 @@ if (logoutBtn) {
 // ---- tool selection state ---- TODO persisted, but only in memory not in DB
 function loadSelectedTools() {
   try {
-    const raw = localStorage.getItem(TOOLS_STORAGE_KEY);
+    const raw = localStorage.getItem(SELECTED_TOOLS_STORAGE_KEY);
     if (!raw) return;
     const arr = JSON.parse(raw);
     if (Array.isArray(arr)) selectedTools = new Set(arr);
   } catch (_) {}
 }
+function loadAvailableTools() {
+  try {
+    const raw = localStorage.getItem(AVAILABLE_TOOLS_STORAGE_KEY);
+    if (!raw) return;
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr)) availableTools = new Set(arr);
+  } catch (_) {}
+}
 
 function saveSelectedTools() {
   try {
-    localStorage.setItem(TOOLS_STORAGE_KEY, JSON.stringify([...selectedTools]));
+    localStorage.setItem(SELECTED_TOOLS_STORAGE_KEY, JSON.stringify([...selectedTools]));
   } catch (_) {}
+}
+
+function saveAvailableTools() {
+  try {
+    localStorage.setItem(AVAILABLE_TOOLS_STORAGE_KEY, JSON.stringify([...availableTools]));
+  } catch (E) {console.log(E)}
 }
 
 function updateEnabledCount() {
@@ -145,6 +199,59 @@ function saveChatSearchSettings() {
   try {
     localStorage.setItem(CHAT_SEARCH_STORAGE_KEY, JSON.stringify(payload));
   } catch (_) {}
+}
+
+function renderToolsCheckboxes() {
+  const listEl = document.getElementById("cuToolsList");
+  const hiddenEl = document.getElementById("cuTools");
+  if (!listEl || !hiddenEl) return;
+
+  // Clear old content
+  listEl.innerHTML = "";
+
+  // Render in stable sorted order (optional)
+  loadAvailableTools()
+  const tools = [...availableTools].sort((a, b) => String(a).localeCompare(String(b)));
+
+  if (tools.length === 0) {
+    listEl.innerHTML = `<div class="muted">No tools available.</div>`;
+    hiddenEl.value = "[]";
+    return;
+  }
+
+  for (const tool of tools) {
+    const id = `cuTool_${cssSafeId(tool)}`;
+
+    const row = document.createElement("label");
+    row.className = "tool-item";
+    row.htmlFor = id;
+
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.id = id;
+    cb.value = tool;
+    cb.checked = selectedTools.has(tool);
+
+    cb.addEventListener("change", () => {
+      if (cb.checked) selectedTools.add(tool);
+      else selectedTools.delete(tool);
+      hiddenEl.value = JSON.stringify([...selectedTools]);
+    });
+
+    const text = document.createElement("span");
+    text.textContent = tool;
+
+    row.appendChild(cb);
+    row.appendChild(text);
+    listEl.appendChild(row);
+  }
+
+  // Initialize hidden field once after rendering
+  hiddenEl.value = JSON.stringify([...selectedTools]);
+}
+// Small helper to make a safe-ish DOM id from tool names
+function cssSafeId(value) {
+  return String(value).replace(/[^a-zA-Z0-9_-]/g, "_");
 }
 
 function renderTools(toolsUi) {
@@ -212,10 +319,14 @@ async function bootstrap() {
     const data = await res.json();
     CHAT_SESSION_ID = data.chat_session_id;
 
-    // if nothing selected yet, default to "all selected"
+    // save all available tools for this user
+    const available = new Set(data.tools_ui.map(t => t.name));
+    availableTools = available;
+    saveAvailableTools();
+
+    // if none are selected yet, default to "all selected"
     if (selectedTools.size === 0 && Array.isArray(data.tools_ui)) {
-      const allowed = new Set(data.tools_ui.map(t => t.name));
-      selectedTools = new Set([...selectedTools].filter(n => allowed.has(n)));
+      selectedTools = available;
       saveSelectedTools();
     }
 
@@ -255,6 +366,7 @@ async function loadEmbeddingModels() {
   if (selects.length === 0) return;
 
   const res = await fetch("/api/admin/embedding-models");
+
   if (!res.ok) {
     for (const select of selects) {
       select.innerHTML = "";
@@ -516,23 +628,6 @@ if (registerForm) {
   });
 }
 
-// ---- create users (admin only) ----
-async function adminCreateUser({ username, password, role }) {
-  const res = await fetch("/api/admin/users", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({ username, password, role }),
-  });
-
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.detail || JSON.stringify(data) || "Request failed");
-  return data; // { ok: true, username, role }
-}
-
-
 // ---- existing chat handler: include selected tools ----
 const chatForm = document.getElementById("chatForm");
 if (chatForm) {
@@ -589,30 +684,49 @@ if (document.getElementById("toolsList")) {
   bootstrap();
 }
 
-loadMe();
+loadMe()
 
 
-function showPanel(targets) {
-  const panels = document.querySelectorAll(".panel");
 
-  // 1) hide everything first
-  panels.forEach(p => p.classList.add("hidden"));
+/*** USER CREATION ***/
+const createUserForm = document.getElementById("createUserForm");
+const createUserMsg  = document.getElementById("createUserMsg");
 
-  // 2) then show requested panel(s)
-  targets.split(",").forEach(id => {
-    const el = document.getElementById(id.trim());
-    if (el) el.classList.remove("hidden");
+if (createUserForm && createUserMsg) {
+  createUserForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const tools = [
+      ...document.querySelectorAll("#cuToolsList input[type='checkbox']:checked")
+    ].map(cb => cb.value);
+
+
+    const data = {
+      username: document.getElementById("cuUsername")?.value ?? "",
+      password: document.getElementById("cuPassword")?.value ?? "",
+      role: document.getElementById("cuRole")?.value ?? "user",
+      tools: tools // JSON.parse(document.getElementById("cuTools").value || "[]")
+    };
+
+    try {
+      const res = await fetch("/api/admin/user/creation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data)
+      });
+
+      const result = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        createUserMsg.textContent = result.detail || result.message || "Error! User could not be created.";
+        return;
+      }
+
+      createUserMsg.textContent = result.message || "User successfully created!";
+      createUserForm.reset();
+    } catch (err) {
+      createUserMsg.textContent = "Error! User could not be created.";
+      console.error(err);
+    }
   });
 }
-
-document.addEventListener("click", (e) => {
-  const btn = e.target.closest("[data-target]");
-  if (!btn) return;
-
-  // active button highlight
-  document.querySelectorAll(".sidebar-actions button")
-    .forEach(b => b.classList.remove("active"));
-  btn.classList.add("active");
-
-  showPanel(btn.dataset.target);
-});

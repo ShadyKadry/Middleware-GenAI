@@ -8,6 +8,7 @@ services:
       POSTGRES_USER: middleware_user
       POSTGRES_PASSWORD: middleware_pwd
       POSTGRES_DB: middleware_genai
+      MIDDLEWARE_PASSWORD: middleware_mcp_pwd
     ports:
       - "5434:5432"        # Host 5434 -> Container 5432 (matches DSN)
     volumes:

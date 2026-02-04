@@ -8,18 +8,21 @@
 <body>
   <div class="layout">
 
-    <!-- Sidebar (only visible for admins) TODO make available for all. -->
-    <aside id="adminSidebar" class="sidebar hidden">
+    <!-- Sidebar -->
+    <aside id="showSidebar" class="sidebar hidden">
       <h2>Welcome, <span id="sidebarUser">{{ user }}</span>!</h2>
       <div id="sidebarRole" class="sidebar-role"></div>
-      <button id="logoutBtn">Log out</button>
+      <div class="sidebar-actions">
+        <button id="logoutBtn">Log out</button>
+      </div>
 
+      <hr class="sidebar-divider" />
 
       <h3>You can:</h3>
-      <div class="sidebar-actions">
-        <button type="button" data-target="panelDataUpload">Upload documents</button>
-        <button type="button" data-target="panelUserCreation">Create user</button>
-        <button type="button" data-target="panelServerRegistration">Add MCP servers</button>
+      <div id="sidebar-actions" >
+        <button type="button" class="admin-only" data-target="panelDataUpload">Upload documents</button>
+        <button type="button" class="admin-only" data-target="panelUserCreation">Create user</button>
+        <button type="button" class="admin-only" data-target="panelServerRegistration">Add MCP servers</button>
         <button type="button" data-target="panelAutoSearch,panelChat,panelTools">Chat</button>
       </div>
 
@@ -87,11 +90,18 @@
           <div class="inline-field">
             <label for="cuRole">Role:</label>
             <select id="cuRole">
-              <option value="guest">Guest</option>
-              <option value="user">User</option>
-              <option value="admin">Admin</option>
+              <option value="Guest">Guest</option>
+              <option value="User">User</option>
+              <option value="Admin">Admin</option>
+              <option value="Student">Student</option>
             </select>
           </div>
+
+          <fieldset class="card" style="margin-top:12px;">
+            <legend>Tools</legend>
+            <div id="cuToolsList" class="cutools-list"></div>
+            <input type="hidden" id="cuTools" name="cutools" value="[]" />
+          </fieldset>
 
           <button type="submit">Create</button>
         </form>
@@ -157,6 +167,7 @@
 
       <!--- Display auto pre-search.--->
       <div id="panelAutoSearch" class="card panel">
+        <h2>Chat.</h2>
         <label class="chat-autosearch-toggle">
           <input id="autoSearchToggle" type="checkbox" /> Auto pre-search
         </label>
@@ -186,7 +197,6 @@
 
       <!-- Chat interface. -->
       <div id="panelChat" class="card panel">
-        <h3>Chat</h3>
 
         <div id="chatLog" class="chat-log"></div>
 
