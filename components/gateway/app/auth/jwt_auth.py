@@ -1,4 +1,5 @@
 import os
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
@@ -8,7 +9,7 @@ from jose import JWTError, jwt
 ACCESS_COOKIE = "access_token"
 REFRESH_COOKIE = "refresh_token"
 
-JWT_SECRET = os.getenv("JWT_SECRET", "dev-change-me")  # set later in env
+JWT_SECRET = os.getenv("JWT_SECRET") or secrets.token_urlsafe(32)  # force new login after application restart # set later in env TODO
 JWT_ALG = os.getenv("JWT_ALGORITHM", "HS256")
 
 ACCESS_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))
@@ -35,7 +36,7 @@ def decode_token(token: str) -> Dict[str, Any]:
 
 
 def set_auth_cookies(resp, access_token: str, refresh_token: str) -> None:
-    # local dev: secure=False; in prod behind HTTPS set secure=True
+    # local dev: secure=False; in prod behind HTTPS set secure=True TODO
     resp.set_cookie(ACCESS_COOKIE, access_token, httponly=True, samesite="lax", secure=False, path="/")
     resp.set_cookie(REFRESH_COOKIE, refresh_token, httponly=True, samesite="lax", secure=False, path="/")
 
