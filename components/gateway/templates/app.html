@@ -48,6 +48,18 @@
           <label for="uploadUserId">Allowed User ID's (optional):</label>
           <input id="uploadUserId" name="user_id" type="text" placeholder="Please state the user's which are allowed to see this document... (seperated by ;)" />
 
+          <!-- Allowed Roles (optional) -->
+          <div class="form-group" style="margin-top: 16px;"> <!-- TODO move to css -->
+            <label for="uploadAllowedRoles">Allowed Roles (optional):</label>
+
+            <div id="uploadAllowedRoles" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 8px;"> <!-- TODO move to css -->
+              <!-- Example roles - adjust to your system -->
+              <label><input type="checkbox" name="allowed_roles" value="User" /> User</label>
+              <label><input type="checkbox" name="allowed_roles" value="Student" /> Student</label>
+              <label><input type="checkbox" name="allowed_roles" value="Guest" /> Guest</label>
+            </div>
+          </div>
+
           <label for="uploadEmbeddingModel">Embedding Model:</label>
           <select id="uploadEmbeddingModel" name="embedding_model"></select>
 
@@ -98,9 +110,15 @@
           </div>
 
           <fieldset class="card" style="margin-top:12px;">
-            <legend>Tools</legend>
+            <legend>Select MCP Servers</legend>
             <div id="cuToolsList" class="cutools-list"></div>
             <input type="hidden" id="cuTools" name="cutools" value="[]" />
+          </fieldset>
+
+          <fieldset class="card" style="margin-top:12px;">
+            <legend>Select Document Collections</legend>
+            <div id="cuCorporaList" class="cucorpora_list"></div>
+            <input type="hidden" id="cuCorpora" name="cuCorpora" value="[]" />
           </fieldset>
 
           <button type="submit">Create</button>
@@ -129,25 +147,34 @@
         <div id="chat-autosearch-form" >
           <div>
             <div class="chat-autosearch-field is-string">
-              <label for="chatCorpusId">Corpus ID's:</label>
-              <input id="chatCorpusId" name="chat_corpus_id" type="text" placeholder="Please state the ID's which should be searched... (seperated by ;)"/>
-            </div>
-          </div>
+              <div id="asCheckboxesStatus" class="muted">Loading…</div>
 
-          <div class="chat-autosearch-row">
-            <div class="chat-autosearch-field is-select">
-              <label for="chatEmbeddingModel">Embedding model:</label>
-              <select id="chatEmbeddingModel" name="chat_embedding_model"></select>
-            </div>
+              <div id="asCorporaContainer" style="display:none;">
+                <div class="corpora-grid">
+                  <fieldset class="card" style="margin-top:12px;">
+                    <legend>Select document collections</legend>
+                    <div id="asCorporaList" class="ascorpora-list"></div>
+                    <input type="hidden" id="asCorpora" name="asCorpora" value="[]" />
+                  </fieldset>
 
-            <div class="chat-autosearch-field">
-              <label for="chatSearchK">Top K:</label>
-              <input id="chatSearchK" name="chat_search_k" type="number" value="5" min="1" />
+                                    <!-- RIGHT: controls -->
+                  <div class="corpora-right">
+                    <div class="corpus-controls">
+                      <button id="corpusAllBtn" type="button">Select all</button>
+                      <button id="corpusNoneBtn" type="button">Select none</button>
+                    </div>
+
+                    <div class="topk-control">
+                      <label for="chatSearchK">Top K:</label>
+                      <input id="chatSearchK" name="chat_search_k" type="number" value="5" min="1" />
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
-
 
       <!-- Chat interface. -->
       <div id="panelChat" class="card panel">

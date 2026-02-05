@@ -374,11 +374,20 @@ body.login-page {
   max-width: 900px;   /* keep it from stretching full page */
 }
 
-/* make all controls consistent */
-#createUserForm input,
-#createUserForm button {
+/* make text inputs full-width, but NOT checkboxes/radios */
+#createUserForm input:not([type="checkbox"]):not([type="radio"]),
+#createUserForm button,
+#createUserForm select,
+#createUserForm textarea {
   width: 100%;
 }
+
+/* explicit checkbox sizing */
+#createUserForm input[type="checkbox"],
+#createUserForm input[type="radio"] {
+  width: auto;
+}
+
 
 /* optional nicer proportions */
 #createUserForm input {
@@ -482,6 +491,35 @@ body.login-page {
   color: #888;
   font-style: italic;
 }
+
+.cucorpora_list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px 16px;
+  justify-items: start;
+  align-items: start;
+  text-align: left;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 6px 2px;
+}
+
+.corpus-item {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  white-space: normal;
+}
+
+.corpus-item input[type="checkbox"] {
+  width: auto;     /* IMPORTANT: override #createUserForm input { width:100% } */
+  height: auto;
+  margin: 0;
+}
+.corpus-item input[type="checkbox"] { width: auto; }
+
 
 
 /** - - - - - - - - - - - - **/
@@ -635,5 +673,226 @@ body.login-page {
 }
 
 
+/* 2-column layout: picker on the left, controls on the right */
+.corpora-grid {
+  display: grid;
+  grid-template-columns: 1fr 260px; /* adjust right column width */
+  gap: 16px;
+  align-items: start;
+}
 
+/* LEFT column */
+.corpora-left .corpus-picker {
+  /* optional: keep the list tidy */
+  max-height: 220px;
+  overflow: auto;
+}
+
+/* RIGHT column: two rows */
+.corpora-right {
+  display: grid;
+  grid-template-rows: auto auto;
+  gap: 12px;
+}
+
+/* Top row: All / None split 50/50 */
+.corpora-right .corpus-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.corpora-right .corpus-controls button {
+  width: 100%;
+}
+
+/* Bottom row: TopK */
+.topk-control {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+#chatSearchK {
+  width: 100%;
+}
+
+/* If embedding model still exists in markup, hide it */
+#chatEmbeddingModel,
+label[for="chatEmbeddingModel"] {
+  display: none !important;
+}
+/* Force the 2-column layout to actually apply */
+#panelAutoSearch .corpora-grid{
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 280px; /* left grows, right fixed */
+  gap: 16px;
+  align-items: start;
+}
+
+/* Remove extra spacing the fieldset introduces */
+#panelAutoSearch fieldset.card {
+  margin-top: 0 !important;
+}
+
+/* Prevent float/clear based layouts from breaking the grid */
+#panelAutoSearch .corpora-left,
+#panelAutoSearch .corpora-right,
+#panelAutoSearch .corpus-controls,
+#panelAutoSearch .topk-control,
+#panelAutoSearch .corpus-picker{
+  float: none !important;
+  clear: none !important;
+  width: auto !important;
+}
+
+/* Left column should be allowed to shrink inside the grid */
+#panelAutoSearch .corpora-left{
+  min-width: 0;
+}
+
+/* Make the checkbox list 2 columns */
+#panelAutoSearch #chatCorpusPicker {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 24px;
+  row-gap: 14px;
+  align-items: start;
+}
+/* Each checkbox row: checkbox + text inline */
+#panelAutoSearch #chatCorpusPicker label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0; /* grid controls spacing */
+}
+
+/* Make sure inputs don't stretch weirdly */
+#panelAutoSearch #chatCorpusPicker input[type="checkbox"] {
+  flex: 0 0 auto;
+}
+/* Make each checkbox row sane: checkbox + text next to each other
+#panelAutoSearch #chatCorpusPicker label{
+  display: flex !important;
+  align-items: center;
+  justify-content: flex-start !important;
+  gap: 10px;
+  margin: 0 0 10px 0;
+  position: static !important;
+}*/
+
+/* Ensure the text isn't absolutely positioned / floated away */
+#panelAutoSearch #chatCorpusPicker label > span,
+#panelAutoSearch #chatCorpusPicker label .label,
+#panelAutoSearch #chatCorpusPicker label .name{
+  position: static !important;
+  float: none !important;
+}
+
+/* Right column: All/None 50/50 on top */
+#panelAutoSearch .corpora-right{
+  padding-top: 20px;
+  display: grid !important;
+  grid-template-rows: auto auto;
+  gap: 12px;
+  align-items: start;
+}
+
+#panelAutoSearch .corpora-right .corpus-controls{
+  display: grid !important;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+#panelAutoSearch .corpora-right .corpus-controls button{
+  flex: 1;                     /* equal width */
+  padding: 14px 18px;
+  border-radius: 10px;
+
+  border: 1px solid #ddd;
+  background: #f3f3f3;
+  box-shadow: none;
+
+  cursor: pointer;
+}
+/* hover / active same feel */
+#panelAutoSearch .corpora-right .corpus-controls button:hover {
+  filter: brightness(0.98);
+}
+#panelAutoSearch .corpora-right .corpus-controls button:active {
+  filter: brightness(0.95);
+}
+
+/* Bottom row: TopK label + input */
+#panelAutoSearch .topk-control{
+  display: grid !important;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+#panelAutoSearch #chatSearchK{
+  width: 100%;
+}
+
+/* --- Auto-search corpora list: 2-column grid --- */
+#panelAutoSearch #asCorporaList.ascorpora-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr)); /* 2 columns */
+  gap: 8px 16px;
+
+  justify-items: start;
+  align-items: start;
+  text-align: left;
+
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 6px 2px;
+}
+
+/* Each checkbox row */
+#panelAutoSearch .asCorpus-item {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+
+  width: 100%;
+  white-space: normal;
+
+  padding: 2px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+#panelAutoSearch .asCorpus-item:hover {
+  background: #f3f4f6;
+}
+
+/* CRITICAL: undo your global #chat-autosearch-form input styles for checkboxes */
+#panelAutoSearch .asCorpus-item input[type="checkbox"] {
+  width: 15px !important;
+  height: 15px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+
+  /* neutralize text-input styling inherited from #chat-autosearch-form input */
+  border: initial !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* Text */
+#panelAutoSearch .asCorpus-item span {
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 700px) {
+  #panelAutoSearch #asCorporaList.ascorpora-list {
+    grid-template-columns: 1fr;
+  }
+}
 

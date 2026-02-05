@@ -33,7 +33,7 @@ def build_backend():
 
     async def upsert_docs(args: Dict[str, Any]) -> Dict[str, Any]:
         model_id = args.get("embedding_model") or DEFAULT_EMBEDDING_MODEL_ID
-        database_name = args.get("database_name") or DEFAULT_EMBEDDING_MODEL_ID
+        database_name = args.get("database_name") or DEFAULT_DATABASE
         collection = build_collection_name(args["corpus_id"], model_id)
         em = get_manager(model_id=model_id, database_name=database_name)
 

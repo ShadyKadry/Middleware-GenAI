@@ -20,7 +20,7 @@ from fastapi.templating import Jinja2Templates
 from google.genai.types import Tool
 from passlib.context import CryptContext
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, union
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,7 +37,7 @@ from .auth.jwt_auth import (
 )
 from .data.roles import AccessRoles
 from .db.session import get_db
-from .db.orm_models import Corpus, MCPServer, Role, User
+from .db.orm_models import Corpus, MCPServer, Role, User, corpus_role_access, user_roles, corpus_user_access
 from .mcp_client import MCPClient
 
 
@@ -77,7 +77,7 @@ class ChatIn(BaseModel):
     selected_tools: Optional[List[str]] = None
     chat_session_id: Optional[str] = None
     auto_search: Optional[bool] = False
-    corpus_id: Optional[str] = None
+    corpora: List[str] = []
     embedding_model: Optional[str] = None
     search_k: Optional[int] = 5
 
@@ -86,6 +86,7 @@ class AdminCreateUserIn(BaseModel):
     password: str
     role: str
     tools: List[str]
+    corpora: List[str]
 
 
 def filter_tools(all_tools, allowed_names: set[str]):
@@ -397,7 +398,7 @@ async def admin_create_user(
     # 1.) load the corresponding 'roles' row
     role_obj = await db.scalar(select(Role).where(Role.name == role))
     if not role_obj:
-        raise HTTPException(status_code=500, detail=f"Role '{role}' not found in roles table.")
+        raise HTTPException(status_code=400, detail=f"Role '{role}' not found in roles table.")
 
     # 2.) create new entry in 'users' table
     user = User(
@@ -421,7 +422,21 @@ async def admin_create_user(
                 raise HTTPException(status_code=400, detail=f"Unknown MCP servers: {', '.join(missing)}")
             user.mcp_servers.extend(servers)
 
+    # 4.) add selected corpora for this user
+    corpora = getattr(payload, "corpora", None)
+    if corpora:
+        corpora_names = [c.strip() for c in corpora if c and c.strip()]
+        if corpora_names:
+            existing_corpora = (await db.scalars(select(Corpus).where(Corpus.name.in_(corpora_names)))).all()
+            found = {c.name for c in existing_corpora}
+
+            missing = sorted(set(corpora_names) - found)
+            if missing:
+                raise HTTPException(status_code=400, detail=f"Unknown corpus id's: {', '.join(missing)}")
+            user.corpora.extend(existing_corpora)
+
     db.add(user)
+    await db.flush()
 
     try:
         await db.commit()
@@ -448,6 +463,8 @@ async def upload_documents(
     user_id: Optional[str] = Form(None),
     chunk_size: int = Form(1200),
     chunk_overlap: int = Form(200),
+    allowed_roles: Optional[List[str]] = Form(None),
+    db: AsyncSession = Depends(get_db),
 ):
     _require_admin(principal)
 
@@ -487,7 +504,7 @@ async def upload_documents(
     target_user_id = user_id or principal["sub"]
 
     result = await mcp_client.call_tool(
-        "document_store.documents.upsert",
+        "document_retrieval.upsert",
         {
             "user_id": target_user_id,
             "corpus_id": corpus_id,
@@ -495,10 +512,32 @@ async def upload_documents(
             "documents": documents,
         },
     )
+
     payload = extract_tool_payload(result)
 
+    # if status==ok TODO catch case of bad response STORE IN DB
+    database_model = "Qdrant"  # TODO hardcode for presentation purpose
+    corpus = Corpus(id=corpus_id, name=corpus_id, embedding_model=embedding_model, database_model=database_model)
+
+    # assign roles that should have access to this document
+    roles_list = list(allowed_roles or [])
+    roles_list.extend(["Admin", "Super-Admin"])  # admins are allowed to see all documents TODO might tighten this assumption at some point
+    role_names = [r.strip() for r in roles_list if r and r.strip()]
+    role_names = list(dict.fromkeys(role_names))
+
+    existing_roles = list(await db.scalars(select(Role).where(Role.name.in_(role_names))))
+    found = {c.name for c in existing_roles}
+
+    missing = sorted(set(role_names) - found)
+    if missing:
+        raise HTTPException(status_code=400, detail=f"Unknown access roles: {', '.join(missing)}")
+    corpus.roles_with_access.extend(existing_roles)
+
+    db.add(corpus)
+    await db.commit()
+
     return {
-        "ok": True,
+        "ok": True,  # TODO
         "corpus_id": corpus_id,
         "embedding_model": embedding_model,
         "chunks": len(documents),
@@ -546,6 +585,7 @@ async def chat_bootstrap(
 async def api_chat(
     payload: ChatIn,
     principal: dict = Depends(current_principal),
+    db: AsyncSession = Depends(get_db),
 ):
     username = principal["sub"]
 
@@ -578,30 +618,35 @@ async def api_chat(
     else:
         tools_for_model = []
 
-    system_instruction = None
+    system_instruction = "Rely on your own capabilities and give you best effort."
+
+    # retrieve information from all selected corpora in autoseach
     if payload.auto_search:
-        corpus_id = (payload.corpus_id or "").strip()
-        if not corpus_id:
+        print(payload.corpora)
+        corpora = [payload.corpora[0]] # TODO only single corpus look up for presentation. since unsure how multiple responses are handled
+        if not corpora:
             raise HTTPException(status_code=400, detail="Missing corpus_id for auto search")
 
-        model_ids = {m["id"] for m in EMBEDDING_MODELS}
-        embedding_model = payload.embedding_model or DEFAULT_EMBEDDING_MODEL_ID
-        if embedding_model not in model_ids:
-            raise HTTPException(status_code=400, detail="Unknown embedding model")
+        for corpus_id in corpora:
+            _, corpus = await get_user_and_corpus_or_404(db, username=username, corpus_id=corpus_id)
 
-        search_k = payload.search_k or 5
-        search_result = await mcp_client.call_tool(
-            "document_store.documents.search",
-            {
-                "user_id": username,
-                "corpus_id": corpus_id,
-                "embedding_model": embedding_model,
+            search_k = payload.search_k or 5
+            payload_ = {
+                "user_id": username.lower(), # TODO TODO TODO fix this mess! why is collection stored via lowercase userid
+                "corpus_id": f"{corpus_id}",
+                "embedding_model": corpus.embedding_model,
+                # "database_model": corpus.database_model,
                 "query": msg,
                 "k": search_k,
-            },
-        )
-        payload_data = extract_tool_payload(search_result)
-        system_instruction = build_retrieval_instruction(payload_data)
+            }
+
+            search_result = await mcp_client.call_tool(
+                "document_retrieval.search",
+                payload_,
+            )
+            payload_data = extract_tool_payload(search_result)
+            system_instruction = build_retrieval_instruction(payload_data)
+
 
     text = await mcp_client.process_query(
         query=msg,
@@ -609,3 +654,102 @@ async def api_chat(
         system_instruction=system_instruction,
     )
     return {"text": text}
+
+
+@app.post("/api/corpora/bootstrap")
+async def corpora_bootstrap(
+    principal: dict = Depends(current_principal),
+    db: AsyncSession = Depends(get_db),
+):
+    username = principal["sub"]
+
+    user = await db.scalar(select(User).where(User.username == username))
+    if not user:
+        raise HTTPException(401, "Unknown user")
+
+    # 2) corpora via roles -> select only Corpus.id
+    role_corpora_ids = (
+        select(Corpus.id)
+        .join(corpus_role_access, corpus_role_access.c.corpus_id == Corpus.id)
+        .join(user_roles, user_roles.c.role_id == corpus_role_access.c.role_id)
+        .where(user_roles.c.user_id == user.id)
+        .where(Corpus.enabled.is_(True))
+    )
+
+    # 3) corpora via direct user access -> select only Corpus.id
+    user_corpora_ids = (
+        select(Corpus.id)
+        .join(corpus_user_access, corpus_user_access.c.corpus_id == Corpus.id)
+        .where(corpus_user_access.c.user_id == user.id)
+        .where(Corpus.enabled.is_(True))
+    )
+
+    corpus_ids = (await db.scalars(union(role_corpora_ids, user_corpora_ids))).all()
+
+    if not corpus_ids:
+        corpora = []
+    else:
+        corpora = (
+            await db.scalars(
+                select(Corpus)
+                .where(Corpus.id.in_(corpus_ids))
+                .order_by(Corpus.name)
+            )
+        ).all()
+
+    return {
+        "ok": True,
+        "username": username,
+        "corpora": [{"id": c.id, "name": c.name, "meta": c.meta} for c in corpora],
+    }
+
+
+from sqlalchemy import select, exists, or_
+from sqlalchemy.orm import selectinload
+
+async def get_user_and_corpus_or_404(
+    db: AsyncSession,
+    *,
+    username: str,
+    corpus_id: str,
+):
+    # Load user + their roles (for role-based checks)
+    user_stmt = (
+        select(User)
+        .where(User.username == username)
+        .options(selectinload(User.roles))
+    )
+    user = (await db.execute(user_stmt)).scalar_one_or_none()
+    if not user:
+        # if your auth guarantees user exists, this can be 401/403 instead
+        raise HTTPException(status_code=401, detail="Unknown user")
+
+    corpus_stmt = select(Corpus).where(Corpus.id == corpus_id, Corpus.enabled.is_(True))
+    corpus = (await db.execute(corpus_stmt)).scalar_one_or_none()
+    if not corpus:
+        raise HTTPException(status_code=404, detail="Unknown corpus")
+
+    if user.is_superadmin:
+        return user, corpus
+
+    role_ids = [r.id for r in user.roles]
+
+    # either direct user access...
+    direct_access = exists().where(
+        corpus_user_access.c.corpus_id == corpus_id,
+        corpus_user_access.c.user_id == user.id,
+    )
+
+    # ...or role-based access
+    role_access = exists().where(
+        corpus_role_access.c.corpus_id == corpus_id,
+        corpus_role_access.c.role_id.in_(role_ids) if role_ids else False,
+    )
+
+    access_stmt = select(or_(direct_access, role_access))
+    allowed = (await db.execute(access_stmt)).scalar_one()
+
+    if not allowed:
+        raise HTTPException(status_code=403, detail="No access to corpus")
+
+    return user, corpus

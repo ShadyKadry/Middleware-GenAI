@@ -1,9 +1,17 @@
 const CHAT_SEARCH_STORAGE_KEY = "chat_presearch_v1";
 const SELECTED_TOOLS_STORAGE_KEY = "enabled_tools_v1";
 const AVAILABLE_TOOLS_STORAGE_KEY = "available_tools_v1";
+const AVAILABLE_CORPORA_STORAGE_KEY = "available_corpora_v1"
+const SELECTED_CORPORA_FOR_USER_KEY   = "selected_corpora_for_user";
+const SELECTED_CORPORA_FOR_SEARCH_KEY = "selected_corpora_for_search";
 
 let selectedTools = new Set();
+let selectedCorpusIdsForAutoSearch = new Set();
+let selectedCorpusIdsForUserCreation = new Set();
 let availableTools = new Set();
+let availableCorpora = new Set();
+let availableCorporaList = [];
+
 let CURRENT_USER = null;
 let CURRENT_ROLE = null;
 let CHAT_SESSION_ID = null;
@@ -49,6 +57,9 @@ document.addEventListener("click", (e) => {
   showPanel(targets);
 });
 
+
+/** LOAD_ME **/
+
 async function loadMe() {
   const res = await fetch("/api/me");
   if (!res.ok) return;
@@ -58,11 +69,10 @@ async function loadMe() {
 
   CURRENT_USER = data.user.toLowerCase();
   CURRENT_ROLE = data.role.toLowerCase();
+  const isAdmin = CURRENT_ROLE === "admin" || CURRENT_ROLE === "super-admin";
 
   const sidebar = document.getElementById("showSidebar");
   if (sidebar) sidebar.classList.remove("hidden");
-
-  const isAdmin = CURRENT_ROLE === "admin" || CURRENT_ROLE === "super-admin";
 
   // hide/show admin-only BUTTONS
   document.querySelectorAll(".admin-only").forEach(el =>
@@ -75,8 +85,10 @@ async function loadMe() {
       const el = document.getElementById(id);
       if (el) el.classList.add("hidden");
     });
-  } else { renderToolsCheckboxes(); }
-
+  } else {
+    renderMCPServerCheckboxes();
+    setAutoSearchCorporaLoading(true);
+  }
   // everyone starts here
   showPanel("panelAutoSearch,panelChat,panelTools");
 
@@ -85,7 +97,9 @@ async function loadMe() {
   }
 }
 
+
 /*** - - - LOGIN - - - ***/
+
 const form = document.getElementById("loginForm");
 if (form) {
   form.addEventListener("submit", async (e) => {
@@ -125,6 +139,48 @@ function loadAvailableTools() {
   } catch (_) {}
 }
 
+function getAvailableServers() {
+  return new Set(
+    [...availableTools].map(t => t.split(".")[0])
+  );
+}
+
+function loadAvailableCorpora() {
+    try {
+    const raw = localStorage.getItem(AVAILABLE_CORPORA_STORAGE_KEY);
+    if (!raw) return;
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr)) availableCorpora = new Set(arr);
+  } catch (_) {}
+}
+
+
+function saveSelectedCorpusIdsForAutoSearch() {
+  localStorage.setItem("selectedCorpusIdsForAutoSearch", JSON.stringify([...selectedCorpusIdsForAutoSearch]));
+}
+
+function saveSelectedCorpusIdsForUserCreation() {
+  localStorage.setItem("selectedCorpusIdsForUserCreation", JSON.stringify([...selectedCorpusIdsForUserCreation]));
+}
+
+function loadSelectedCorpusIdsForAutoSearch() {
+  try {
+    const raw = localStorage.getItem("selectedCorpusIdsForAutoSearch");
+    selectedCorpusIdsForAutoSearch = new Set(raw ? JSON.parse(raw) : []);
+  } catch {
+    selectedCorpusIdsForAutoSearch = new Set();
+  }
+}
+function loadSelectedCorpusIdsForUserCreation() {
+  try {
+    const raw = localStorage.getItem("selectedCorpusIdsForUserCreation");
+    selectedCorpusIdsForUserCreation = new Set(raw ? JSON.parse(raw) : []);
+  } catch {
+    selectedCorpusIdsForUserCreation = new Set();
+  }
+}
+
+
 function saveSelectedTools() {
   try {
     localStorage.setItem(SELECTED_TOOLS_STORAGE_KEY, JSON.stringify([...selectedTools]));
@@ -134,6 +190,12 @@ function saveSelectedTools() {
 function saveAvailableTools() {
   try {
     localStorage.setItem(AVAILABLE_TOOLS_STORAGE_KEY, JSON.stringify([...availableTools]));
+  } catch (E) {console.log(E)}
+}
+
+function saveAvailableCorpora() {
+  try {
+    localStorage.setItem(AVAILABLE_CORPORA_STORAGE_KEY, JSON.stringify([...availableCorpora]))
   } catch (E) {console.log(E)}
 }
 
@@ -179,7 +241,246 @@ function saveChatSearchSettings() {
   } catch (_) {}
 }
 
-function renderToolsCheckboxes() {
+function setMcpServersLoading(isLoading, msg = "Loading…") {
+  const statusEl = document.getElementById("cuToolsStatus");
+  const containerEl = document.getElementById("cuToolsContainer");
+
+  if (statusEl) statusEl.textContent = isLoading ? msg : "";
+  if (containerEl) containerEl.style.display = isLoading ? "none" : "";
+}
+function renderMCPServerCheckboxes() {
+  const listEl = document.getElementById("cuToolsList");
+  const hiddenEl = document.getElementById("cuTools");
+  if (!listEl || !hiddenEl) return;
+
+  listEl.innerHTML = "";
+
+  // load once (I/O layer)
+  loadAvailableTools();
+
+  // derive servers (logic layer)
+  const servers = [...getAvailableServers()]
+    .sort((a, b) => a.localeCompare(b));
+
+  if (servers.length === 0) {
+    listEl.innerHTML = `<div class="muted">No servers available.</div>`;
+    hiddenEl.value = "[]";
+    return;
+  }
+
+  for (const server of servers) {
+    const id = `cuServer_${cssSafeId(server)}`;
+
+    const row = document.createElement("label");
+    row.className = "cutool-item";
+    row.htmlFor = id;
+
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.id = id;
+    cb.value = server;
+    cb.checked = selectedTools.has(server); // or selectedServers if you rename later
+
+    cb.addEventListener("change", () => {
+      if (cb.checked) selectedTools.add(server);
+      else selectedTools.delete(server);
+
+      hiddenEl.value = JSON.stringify([...selectedTools]);
+    });
+
+    const text = document.createElement("span");
+    text.textContent = server;
+
+    row.appendChild(cb);
+    row.appendChild(text);
+    listEl.appendChild(row);
+  }
+}
+
+/**
+function renderCorporaCheckboxes() {
+  const listEl = document.getElementById("cuCorporaList");
+  const hiddenEl = document.getElementById("cuCorpora");
+  if (!listEl || !hiddenEl) return;
+
+  listEl.innerHTML = "";
+
+  // load once (I/O layer)
+  //loadAvailableTools();
+  loadAvailableCorpora()
+  loadSelectedCorpusIdsForUserCreation()
+
+    // sort by name
+  const corpora2 = [...selectedCorpusIdsForUserCreation].sort((a, b) =>
+    (a.name ?? "").localeCompare(b.name ?? "")
+  );
+  const corpora = availableCorpora
+
+  if (corpora.length === 0) {
+    listEl.innerHTML = `<div class="muted">No collections available.</div>`;
+    hiddenEl.value = "[]";
+    return;
+  }
+
+  for (const c of corpora) {
+    const id = `cuCorpus_${cssSafeId(c)}`;
+
+    const row = document.createElement("label");
+    row.className = "corpus-item";
+    row.htmlFor = id;
+
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.id = id;
+    cb.value = c;
+    cb.checked = corpora.has(c); // or selectedServers if you rename later
+
+    cb.addEventListener("change", () => {
+      if (cb.checked) corpora.add(c);
+      else corpora.delete(c);
+
+      hiddenEl.value = JSON.stringify([...corpora]);
+    });
+
+    const text = document.createElement("span");
+    text.textContent = c;
+
+    row.appendChild(cb);
+    row.appendChild(text);
+    listEl.appendChild(row);
+  }
+}**/
+function setAutoSearchCorporaLoading(isLoading, msg = "Loading…") {
+  const statusEl = document.getElementById("asCheckboxesStatus");
+  const containerEl = document.getElementById("asCorporaContainer");
+
+  if (statusEl) statusEl.textContent = isLoading ? msg : "";
+  if (containerEl) containerEl.style.display = isLoading ? "none" : "";
+}
+function renderCorporaCheckboxesAutoSearch() {
+/*  const listEl = document.getElementById("asCorporaList");
+  const hiddenEl = document.getElementById("asCorpora");
+  if (!listEl || !hiddenEl) return;*/
+
+  const statusEl = document.getElementById("asCheckboxesStatus");
+  const containerEl = document.getElementById("asCorporaContainer");
+  const listEl = document.getElementById("asCorporaList");
+  const hiddenEl = document.getElementById("asCorpora");
+  if (!listEl || !hiddenEl) return;
+
+  if (statusEl) statusEl.textContent = "Loading…";
+  if (containerEl) containerEl.style.display = "none";
+
+
+  listEl.innerHTML = "";
+
+  //loadAvailableCorpora();                 // fills availableCorpora (Set of ids)
+  loadSelectedCorpusIdsForAutoSearch(); // fills selectedCorpusIdsForUserCreation (Set of ids)
+
+  const corpora = [...availableCorpora].map(String).sort((a, b) => a.localeCompare(b));
+
+  if (corpora.length === 0) {
+    listEl.innerHTML = `<div class="muted">No collections available.</div>`;
+    hiddenEl.value = "[]";
+    return;
+  }
+
+  // show UI now that we have corpora
+  if (statusEl) statusEl.textContent = "";
+  if (containerEl) containerEl.style.display = "";
+
+  for (const corpusId of corpora) {
+    const id = `asCorpus_${cssSafeId(corpusId)}`;
+
+    const row = document.createElement("label");
+    row.className = "asCorpus-item"; // TODO replace
+    row.htmlFor = id;
+
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.id = id;
+    cb.value = corpusId;
+
+    // checked = selected-for-user-creation
+    cb.checked = selectedCorpusIdsForAutoSearch.has(corpusId);
+
+    cb.addEventListener("change", () => {
+      // mutate selected set, not available
+      if (cb.checked) selectedCorpusIdsForAutoSearch.add(corpusId);
+      else selectedCorpusIdsForAutoSearch.delete(corpusId);
+
+      hiddenEl.value = JSON.stringify([...selectedCorpusIdsForAutoSearch]);
+      saveSelectedCorpusIdsForAutoSearch(); // if you have it
+    });
+
+    const text = document.createElement("span");
+    text.textContent = corpusId;
+
+    row.appendChild(cb);
+    row.appendChild(text);
+    listEl.appendChild(row);
+  }
+
+  // initialize hidden field
+  hiddenEl.value = JSON.stringify([...selectedCorpusIdsForAutoSearch]);
+}
+
+function renderCorporaCheckboxesUserCreation() {
+  const listEl = document.getElementById("cuCorporaList");
+  const hiddenEl = document.getElementById("cuCorpora");
+  if (!listEl || !hiddenEl) return;
+
+  listEl.innerHTML = "";
+
+  loadAvailableCorpora();                 // fills availableCorpora (Set of ids)
+  loadSelectedCorpusIdsForUserCreation(); // fills selectedCorpusIdsForUserCreation (Set of ids)
+
+  const corpora = [...availableCorpora].map(String).sort((a, b) => a.localeCompare(b));
+
+  if (corpora.length === 0) {
+    listEl.innerHTML = `<div class="muted">No collections available.</div>`;
+    hiddenEl.value = "[]";
+    return;
+  }
+
+  for (const corpusId of corpora) {
+    const id = `cuCorpus_${cssSafeId(corpusId)}`;
+
+    const row = document.createElement("label");
+    row.className = "cutool-item"; // TODO replace
+    row.htmlFor = id;
+
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.id = id;
+    cb.value = corpusId;
+
+    // checked = selected-for-user-creation
+    cb.checked = selectedCorpusIdsForUserCreation.has(corpusId);
+
+    cb.addEventListener("change", () => {
+      // mutate selected set, not available
+      if (cb.checked) selectedCorpusIdsForUserCreation.add(corpusId);
+      else selectedCorpusIdsForUserCreation.delete(corpusId);
+
+      hiddenEl.value = JSON.stringify([...selectedCorpusIdsForUserCreation]);
+      saveSelectedCorpusIdsForUserCreation?.(); // if you have it
+    });
+
+    const text = document.createElement("span");
+    text.textContent = corpusId;
+
+    row.appendChild(cb);
+    row.appendChild(text);
+    listEl.appendChild(row);
+  }
+
+  // initialize hidden field
+  hiddenEl.value = JSON.stringify([...selectedCorpusIdsForUserCreation]);
+}
+
+
+/**function renderMCPServerCheckboxes() {
   const listEl = document.getElementById("cuToolsList");
   const hiddenEl = document.getElementById("cuTools");
   if (!listEl || !hiddenEl) return;
@@ -226,7 +527,9 @@ function renderToolsCheckboxes() {
 
   // Initialize hidden field once after rendering
   hiddenEl.value = JSON.stringify([...selectedTools]);
-}
+}**/
+
+
 // Small helper to make a safe-ish DOM id from tool names
 function cssSafeId(value) {
   return String(value).replace(/[^a-zA-Z0-9_-]/g, "_");
@@ -279,18 +582,23 @@ function renderTools(toolsUi) {
   updateEnabledCount();
 }
 
+
+/*** - - - - - - - - - - - ***/
+/*** - - - BOOTSTRAP - - - ***/
+/*** - - - - - - - - - - - ***/
+
 async function bootstrap() {
   const toolsStatus = document.getElementById("toolsStatus");
 
   // restore prior tool selection early
   loadSelectedTools();
-  updateEnabledCount();
+  updateEnabledCount();  // todo seems buggy in UI
 
   try {
-    const res = await fetch("/api/chat/bootstrap", { method: "POST" });
+    const res = await fetch("/api/chat/bootstrap", { method: "POST", credentials: "include" });
     if (!res.ok) {
       const text = await res.text();
-      toolsStatus.textContent = `Bootstrap failed: ${text}`;
+      toolsStatus.textContent = `Bootstrapping MCP tools failed: ${text}`;
       return;
     }
 
@@ -299,12 +607,12 @@ async function bootstrap() {
 
     // save all available tools for this user
     const available = new Set(data.tools_ui.map(t => t.name));
-    availableTools = available;
+    availableTools = new Set(available);
     saveAvailableTools();
 
     // if none are selected yet, default to "all selected"
     if (selectedTools.size === 0 && Array.isArray(data.tools_ui)) {
-      selectedTools = available;
+      selectedTools = new Set(available);
       saveSelectedTools();
     }
 
@@ -333,7 +641,141 @@ async function bootstrap() {
   } catch (e) {
     if (toolsStatus) toolsStatus.textContent = `Bootstrap error: ${e}`;
   }
+
+  // bootstrap all available corpora
+  try{
+    const res = await fetch("/api/corpora/bootstrap", { method: "POST", credentials: "include" });
+    if (!res.ok) {
+      const text = await res.text();
+      console.log(`Bootstrapping corpora failed: ${text}`);
+      return;
+    }
+    const data = await res.json();
+    availableCorporaList = Array.isArray(data.corpora) ? data.corpora : [];
+    availableCorpora = new Set(availableCorporaList.map(c => String(c.id)));
+    saveAvailableCorpora();
+    loadSelectedCorpusIdsForAutoSearch();  // TODO cache?
+    loadSelectedCorpusIdsForUserCreation();
+
+    // save all available corpora for this user (if none -> empty)
+    const allowed = new Set(availableCorporaList.map(c => String(c.id)));
+    selectedCorpusIdsForAutoSearch = new Set(
+      [...selectedCorpusIdsForAutoSearch].filter(id => allowed.has(id))
+    );
+    selectedCorpusIdsForUserCreation = new Set(
+      [...selectedCorpusIdsForUserCreation].filter(id => allowed.has(id))
+    );
+
+    // default: select all if first visit
+    if (selectedCorpusIdsForAutoSearch.size === 0 && availableCorporaList.length > 0) {
+      selectedCorpusIdsForAutoSearch = new Set(availableCorporaList.map(c => String(c.id)));
+    }
+    if (selectedCorpusIdsForUserCreation.size === 0 && availableCorporaList.length > 0) {
+      selectedCorpusIdsForUserCreation = new Set(availableCorporaList.map(c => String(c.id)));
+    }
+
+    saveSelectedCorpusIdsForAutoSearch();
+    saveSelectedCorpusIdsForUserCreation();
+
+    renderCorporaCheckboxesAutoSearch();
+    renderCorporaCheckboxesUserCreation();
+
+    setAutoSearchCorporaLoading(false);
+
+    renderCorpusPicker();  // create checkboxes
+    wireCorpusButtons();
+
+  } catch (e) {
+    console.log(e)
+  }
 }
+
+// ---- display the available corpora
+function updateHiddenCorpusInput() {
+  const hidden = document.getElementById("chatCorpusId");
+  const hint = document.getElementById("chatCorpusHint");
+  const ids = [...selectedCorpusIdsForAutoSearch];
+  const value = ids.join(";");
+
+  if (hidden) hidden.value = value;
+
+  if (hint) {
+    hint.textContent = ids.length
+      ? `Selected ${ids.length} corpus/corpora`
+      : "No corpora selected (search will run with none unless you select).";
+  }
+}
+
+function renderCorpusPicker() {
+  const container = document.getElementById("chatCorpusPicker");
+  if (!container) return;
+
+  // sort by name
+  const corpora = [...availableCorporaList].sort((a, b) =>
+    (a.name ?? "").localeCompare(b.name ?? "")
+  );
+
+  container.innerHTML = "";
+
+  if (corpora.length === 0) {
+    container.textContent = "No corpora available.";
+    selectedCorpusIdsForAutoSearch.clear();
+    updateHiddenCorpusInput();
+    return;
+  }
+
+  const frag = document.createDocumentFragment();
+
+  for (const c of corpora) {
+    const id = String(c.id);
+    const name = String(c.name ?? c.id);
+
+    const label = document.createElement("label");
+    label.className = "corpus-option";
+    label.style.display = "flex";
+    label.style.alignItems = "center";
+    label.style.gap = "0.5rem";
+
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = selectedCorpusIdsForAutoSearch.has(id);
+
+    cb.addEventListener("change", () => {
+      if (cb.checked) selectedCorpusIdsForAutoSearch.add(id);
+      else selectedCorpusIdsForAutoSearch.delete(id);
+      saveSelectedCorpusIdsForAutoSearch();
+      updateHiddenCorpusInput();
+    });
+
+    const text = document.createElement("span");
+    text.textContent = name;
+
+    label.appendChild(cb);
+    label.appendChild(text);
+    frag.appendChild(label);
+  }
+
+  container.appendChild(frag);
+  updateHiddenCorpusInput();
+}
+
+function wireCorpusButtons() {
+  const allBtn = document.getElementById("corpusAllBtn");
+  const noneBtn = document.getElementById("corpusNoneBtn");
+
+  if (allBtn) allBtn.onclick = () => {
+    selectedCorpusIdsForAutoSearch = new Set(availableCorporaList.map(c => String(c.id)));
+    saveSelectedCorpusIdsForAutoSearch();
+    renderCorpusPicker();
+  };
+
+  if (noneBtn) noneBtn.onclick = () => {
+    selectedCorpusIdsForAutoSearch = new Set();
+    saveSelectedCorpusIdsForAutoSearch();
+    renderCorpusPicker();
+  };
+}
+
 
 // ---- chat search (RAG) ----
 async function loadEmbeddingModels() {
@@ -459,17 +901,19 @@ if (chatForm) {
     if (!message) return;
 
     const autoSearch = autoSearchToggle ? autoSearchToggle.checked : false;
-    const corpusId = chatCorpusId ? chatCorpusId.value.trim() : "";
+    //const corpusId = chatCorpusId ? chatCorpusId.value.trim() : "";
     const embeddingModel = chatEmbeddingModel ? chatEmbeddingModel.value : "";
     const searchK = chatSearchK ? Number(chatSearchK.value || 5) : 5;
 
-    if (autoSearch && !corpusId) {
+    if (autoSearch && selectedCorpusIdsForAutoSearch.size===0) {
       chatErr.textContent = "Auto pre-search requires a corpus ID.";
       return;
     }
 
     chatLog.textContent += `You: ${message}\n`;
     chatInput.value = "";
+
+    console.log([...selectedCorpusIdsForAutoSearch])
 
     const res = await fetch("/api/chat", {
       method: "POST",
@@ -479,7 +923,7 @@ if (chatForm) {
         selected_tools: [...selectedTools],
         chat_session_id: CHAT_SESSION_ID,
         auto_search: autoSearch,
-        corpus_id: corpusId,
+        corpora: [...selectedCorpusIdsForAutoSearch],
         embedding_model: embeddingModel,
         search_k: searchK,
       }),
@@ -499,10 +943,7 @@ if (chatForm) {
 if (document.getElementById("toolsList")) {
   bootstrap();
 }
-
 loadMe()
-
-
 
 /*** USER CREATION ***/
 const createUserForm = document.getElementById("createUserForm");
@@ -516,12 +957,17 @@ if (createUserForm && createUserMsg) {
       ...document.querySelectorAll("#cuToolsList input[type='checkbox']:checked")
     ].map(cb => cb.value);
 
+    const corpora = [
+      ...document.querySelectorAll("#cuCorporaList input[type='checkbox']:checked")
+    ].map(cb => cb.value);
+
 
     const data = {
       username: document.getElementById("cuUsername")?.value ?? "",
       password: document.getElementById("cuPassword")?.value ?? "",
       role: document.getElementById("cuRole")?.value ?? "user",
-      tools: tools // JSON.parse(document.getElementById("cuTools").value || "[]")
+      tools: tools, // JSON.parse(document.getElementById("cuTools").value || "[]")
+      corpora: corpora
     };
 
     try {
