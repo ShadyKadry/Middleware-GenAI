@@ -174,8 +174,10 @@ class MCPServer(Base):
 class Corpus(Base):
     __tablename__ = "corpora"
 
-    id: Mapped[str] = mapped_column(Text, primary_key=True)  # TEXT PK
+    id: Mapped[str] = mapped_column(Text, primary_key=True)  # TEXT PK TODO is the same as 'name'. check dependencies and remove one...
     name: Mapped[str] = mapped_column(Text, nullable=False)
+    database_model: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding_model: Mapped[str] = mapped_column(Text, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     meta: Mapped[dict[str, Any]] = mapped_column(
