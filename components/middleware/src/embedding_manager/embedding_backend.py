@@ -192,7 +192,7 @@ def list_databases() -> List[str]:
 
 def get_database(database_name: str) -> VectorStore:
     if database_name not in _DB_REGISTRY:
-        raise ValueError(f"Unknown embedding model: {database_name}")
+        raise ValueError(f"Unknown database model: {database_name}")
 
     if database_name not in _DB_CACHE:
         _DB_CACHE[database_name] = _DB_REGISTRY[database_name]()

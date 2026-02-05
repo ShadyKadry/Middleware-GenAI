@@ -28,6 +28,8 @@ CREATE TABLE mcp_servers (
 CREATE TABLE corpora (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
+  database_model TEXT NOT NULL,
+  embedding_model TEXT NOT NULL,
   enabled BOOLEAN NOT NULL DEFAULT TRUE,
   meta JSONB NOT NULL DEFAULT '{}',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
