@@ -532,23 +532,87 @@ async def admin_create_user(
 async def register_mcp_server(
     payload: Dict[str, Any],
     principal: dict = Depends(current_principal),
+    db: AsyncSession = Depends(get_db),
 ):
     _require_admin(principal)
+    name = payload.get("name")
+    enabled = bool(payload.get("enabled", True))
 
-    backend = normalize_backend_def(payload)
+    if not name or not isinstance(name, str):
+        raise HTTPException(status_code=400, detail="name is required")
 
-    config = load_backends_config()
-    if "backends" not in config or not isinstance(config["backends"], list):
-        raise HTTPException(status_code=500, detail="Invalid backend config format")
+    kind = payload.get("kind") or "remote_mcp"
+    if kind != "remote_mcp":
+        raise HTTPException(status_code=400, detail="Only remote_mcp is supported.")
 
-    existing = {b.get("name") for b in config["backends"]}
-    if backend["name"] in existing:
-        raise HTTPException(status_code=409, detail="Backend name already exists")
+    transport = payload.get("transport") or "stdio"
+    if transport not in {"stdio", "sse", "http"}:
+        raise HTTPException(status_code=400, detail="Unsupported transport.")
 
-    config["backends"].append(backend)
-    save_backends_config(config)
+    if transport == "stdio":
+        command = payload.get("command")
+        if not command:
+            raise HTTPException(status_code=400, detail="command is required for stdio transport")
 
-    return {"ok": True, "backend": backend}
+        args = _ensure_list(payload.get("args")) or []
+        env = payload.get("env") or {}
+        if not isinstance(env, dict):
+            raise HTTPException(status_code=400, detail="env must be an object")
+        config = { "command": command, "args": args, "env": env }
+
+    else:
+        server_url = payload.get("server_url")
+        if not server_url:
+            raise HTTPException(status_code=400, detail="server_url is required for remote transport")
+
+        headers = payload.get("headers") or {}
+        if not isinstance(headers, dict):
+            raise HTTPException(status_code=400, detail="headers must be an object")
+        config = {"server_url": server_url, "headers": headers}
+
+    # build new DB entry
+    mcp_server = MCPServer(name=name, kind=kind, transport=transport, enabled=enabled, config=config)
+
+    # --- build relations (THIS writes join tables on commit) ---
+    required_role_names = [x for x in _ensure_list(payload.get("required_roles"))]
+    allowed_usernames = [x for x in _ensure_list(payload.get("allowed_users"))]
+
+    users: list[User] = []
+    if allowed_usernames:
+        res = await db.execute(select(User).where(User.username.in_(allowed_usernames)))
+        users = res.scalars().all()
+
+        found = {u.username for u in users}
+        missing = [uname for uname in allowed_usernames if uname not in found]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Unknown username(s): {missing}")
+
+    roles: list[Role] = []
+    if required_role_names:
+        required_roles = list(dict.fromkeys(required_role_names))
+        res = await db.execute(select(Role).where(Role.name.in_(required_roles)))
+        roles = res.scalars().all()
+
+        found = {r.name for r in roles}
+        missing = [name for name in required_roles if name not in found]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Unknown role(s): {missing}")
+
+    mcp_server.roles_with_access.extend(roles)
+    mcp_server.users_with_access.extend(users)
+
+    db.add(mcp_server)
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
+
+    # optionally load generated id/relationships
+    await db.refresh(mcp_server)
+
+    return {"id": mcp_server.id, "name": mcp_server.name}
+
 
 
 @app.get("/api/admin/embedding-models")
