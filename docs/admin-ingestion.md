@@ -52,7 +52,7 @@ Gateway upload endpoint:
 
 Files:
 - UI: `components/gateway/templates/app.html`
-- JS: `components/gateway/static/app.js`
+- JS: `components/gateway/static/main.js`
 - API: `components/gateway/app/main.py`
 
 ### File Conversion (Multi-type Support)
@@ -91,7 +91,7 @@ Chat UI controls:
 
 Files:
 - UI: `components/gateway/templates/app.html`
-- JS: `components/gateway/static/app.js`
+- JS: `components/gateway/static/main.js`
 - API + logic: `components/gateway/app/main.py`
 - Gemini system instruction: `components/gateway/app/mcp_client.py`
 
