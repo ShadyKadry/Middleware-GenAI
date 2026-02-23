@@ -8,6 +8,7 @@ from typing import List, Any, Dict, Optional, Set
 from fastapi import (
     FastAPI,
     Request,
+    Response,
     Form,
     HTTPException,
     Depends,
@@ -20,7 +21,7 @@ from fastapi.templating import Jinja2Templates
 from google.genai.types import Tool
 from passlib.context import CryptContext
 from pydantic import BaseModel
-from sqlalchemy import select, union
+from sqlalchemy import union
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -58,17 +59,6 @@ EMBEDDING_MODELS = [
     {"id": "stub-256", "label": "Stub (deterministic, 256d)"},
 ]
 DEFAULT_EMBEDDING_MODEL_ID = "gemini-embedding-001"
-
-# middleware backend registry config
-BACKENDS_CONFIG_PATH = (
-    BASE_DIR.parent.parent
-    / "components"
-    / "middleware"
-    / "src"
-    / "mcp_manager"
-    / "local_servers"
-    / "backends.json"
-)
 
 
 #######################################
@@ -144,65 +134,6 @@ def _ensure_list(value: Any) -> List[str]:
         parts = [p.strip() for p in value.replace(",", ";").split(";")]
         return [p for p in parts if p]
     raise HTTPException(status_code=400, detail="Invalid list field")
-
-
-def load_backends_config() -> Dict[str, Any]:
-    if not BACKENDS_CONFIG_PATH.exists():
-        return {"backends": []}
-    with BACKENDS_CONFIG_PATH.open("r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-def save_backends_config(config: Dict[str, Any]) -> None:
-    BACKENDS_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with BACKENDS_CONFIG_PATH.open("w", encoding="utf-8") as f:
-        json.dump(config, f, indent=2)
-
-
-def normalize_backend_def(payload: Dict[str, Any]) -> Dict[str, Any]:
-    name = payload.get("name")
-    if not name or not isinstance(name, str):
-        raise HTTPException(status_code=400, detail="name is required")
-
-    kind = payload.get("kind") or "remote_mcp"
-    if kind != "remote_mcp":
-        raise HTTPException(status_code=400, detail="Only remote_mcp is supported")
-
-    backend: Dict[str, Any] = {
-        "name": name.strip(),
-        "kind": kind,
-        "enabled": bool(payload.get("enabled", True)),
-        "required_roles": _ensure_list(payload.get("required_roles")),
-        "allowed_users": _ensure_list(payload.get("allowed_users")),
-    }
-
-    transport = payload.get("transport") or "stdio"
-    if transport not in {"stdio", "sse", "http"}:
-        raise HTTPException(status_code=400, detail="Unsupported transport")
-    backend["transport"] = transport
-
-    if transport == "stdio":
-        command = payload.get("command")
-        if not command:
-            raise HTTPException(status_code=400, detail="command is required for stdio transport")
-        backend["command"] = str(command)
-        args = payload.get("args") or []
-        backend["args"] = _ensure_list(args)
-        env = payload.get("env") or {}
-        if not isinstance(env, dict):
-            raise HTTPException(status_code=400, detail="env must be an object")
-        backend["env"] = env
-    else:
-        server_url = payload.get("server_url")
-        if not server_url:
-            raise HTTPException(status_code=400, detail="server_url is required for remote transport")
-        backend["server_url"] = str(server_url)
-        headers = payload.get("headers") or {}
-        if not isinstance(headers, dict):
-            raise HTTPException(status_code=400, detail="headers must be an object")
-        backend["headers"] = headers
-
-    return backend
 
 
 def chunk_text(text: str, chunk_size: int = 1200, overlap: int = 200) -> List[str]:
@@ -310,6 +241,14 @@ app.mount(
 
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
+@app.get("/favicon.ico")
+def favicon():
+    return Response(status_code=204) # silence missing icons
+
+@app.get("/apple-touch-icon.png")
+@app.get("/apple-touch-icon-precomposed.png")
+def apple_icon():
+    return Response(status_code=204) # silence missing icons
 
 @app.on_event("shutdown")
 async def on_shutdown():
@@ -705,7 +644,7 @@ async def upload_documents(
     await db.commit()
 
     return {
-        "ok": True,  # TODO
+        "ok": True,  # TODO bold assumption
         "corpus_id": corpus_id,
         "embedding_model": embedding_model,
         "chunks": len(documents),
@@ -746,7 +685,7 @@ async def chat_bootstrap(
                 "description": getattr(fd, "description", "") or ""
             })
 
-    return {"chat_session_id": chat_session_id, "tools_ui": tools_ui}
+    return { "chat_session_id": chat_session_id, "tools_ui": tools_ui }
 
 
 @app.post("/api/chat")
@@ -788,9 +727,8 @@ async def api_chat(
 
     system_instruction = "Rely on your own capabilities and give you best effort."
 
-    # retrieve information from all selected corpora in autoseach
+    # retrieve information from all selected corpora in auto-search
     if payload.auto_search:
-        print(payload.corpora)
         corpora = [payload.corpora[0]] # TODO only single corpus look up for presentation. since unsure how multiple responses are handled
         if not corpora:
             raise HTTPException(status_code=400, detail="Missing corpus_id for auto search")
