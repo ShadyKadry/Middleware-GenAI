@@ -53,7 +53,7 @@ REVOKED_REFRESH_TOKENS: Set[str] = set()
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# embedding models exposed in the admin UI TODO not in all?
+# embedding models exposed in the admin UI
 EMBEDDING_MODELS = [
     {"id": "gemini-embedding-001", "label": "Gemini embedding-001"},
     {"id": "stub-256", "label": "Stub (deterministic, 256d)"},
@@ -201,30 +201,114 @@ def convert_upload_to_markdown(filename: str, data: bytes) -> str:
             pass
 
 
-def build_retrieval_instruction(payload: Any) -> str:
+def normalize_retrieval_payload(payload: Any) -> dict:
     summary = payload
     if isinstance(payload, dict) and "results" in payload:
         summary_results = []
         for result in payload.get("results", []):
-            meta = result.get("metadata", {}) if isinstance(result, dict) else {}
+            if not isinstance(result, dict):
+                continue
+            meta = result.get("metadata", {}) or {}
+            text = meta.get("text")
+            if not text:
+                continue
+
             summary_results.append({
-                "id": result.get("id") if isinstance(result, dict) else None,
-                "score": result.get("score") if isinstance(result, dict) else None,
-                "text": meta.get("text"),
+                "id": result.get("id"),
+                "score": float(result.get("score")) if result.get("score") is not None else None,
+                "text": text,
                 "source": meta.get("source"),
                 "chunk_index": meta.get("chunk_index"),
             })
+
         summary = {
             "query": payload.get("query"),
             "corpus_id": payload.get("corpus_id"),
             "results": summary_results,
         }
+    return summary
 
-    context_json = json.dumps(summary, ensure_ascii=True, indent=2)
+
+def select_best_chunks(
+    summaries: list[dict],
+    max_total: int = 8,
+    min_per_corpus: int = 1,
+) -> list[dict]:
+    by_corpus: dict[str, list[dict]] = {}
+    all_items: list[dict] = []
+
+    for s in summaries:
+        cid = str(s.get("corpus_id"))
+        for r in s.get("results", []):
+            item = {
+                "corpus_id": cid,
+                "id": r.get("id"),
+                "score": float(r["score"]) if r.get("score") is not None else None,
+                "text": r.get("text"),
+                "source": r.get("source"),
+                "chunk_index": r.get("chunk_index"),
+            }
+            by_corpus.setdefault(cid, []).append(item)
+            all_items.append(item)
+
+    # sort within corpus by score desc
+    for cid in by_corpus:
+        by_corpus[cid].sort(key=lambda x: (x["score"] is None, -(x["score"] or 0.0)))
+
+    picked: list[dict] = []
+
+    # guarantee coverage
+    for cid, items in by_corpus.items():
+        picked.extend(items[:min_per_corpus])
+
+    # global sort by score desc
+    all_items.sort(key=lambda x: (x["score"] is None, -(x["score"] or 0.0)))
+
+    # dedupe by (corpus_id, chunk_index) or by text
+    seen = {(p["corpus_id"], p["chunk_index"]) for p in picked if p.get("chunk_index") is not None}
+    seen_text = {p["text"] for p in picked if p.get("text")}
+
+    for item in all_items:
+        if len(picked) >= max_total:
+            break
+        key = (item["corpus_id"], item.get("chunk_index"))
+        if item.get("chunk_index") is not None and key in seen:
+            continue
+        if item.get("text") and item["text"] in seen_text:
+            continue
+        picked.append(item)
+        if item.get("chunk_index") is not None:
+            seen.add(key)
+        if item.get("text"):
+            seen_text.add(item["text"])
+
+    # final sort so best appear first in prompt
+    picked.sort(key=lambda x: (x["score"] is None, -(x["score"] or 0.0)))
+    return picked
+
+
+def build_multi_instruction(best_chunks: list[dict[str, Any]]) -> str:
+    """
+    best_chunks: a list of chunk dicts (should already be ranked best-first).
+    Each chunk should include at least:
+      - corpus_id: str
+      - score: float in [0,1] (higher = more relevant)
+      - text: str
+      - source: str | None
+      - chunk_index: int | None
+    """
+    context_json = json.dumps(best_chunks, ensure_ascii=True, indent=2)
+
     return (
-        "Use the retrieved context below to answer the user's question. "
-        "If the context does not contain the answer, say you could not find it in the corpus.\n"
-        f"Retrieved context (JSON):\n{context_json}"
+        "You are an assistant answering the user's question using retrieved context "
+        "from multiple corpora.\n\n"
+        "Rules:\n"
+        "- Each context item has a relevance score normalized between 0 and 1; higher means more relevant.\n"
+        "- Prefer higher-score items. Use lower-score items only if needed to fill gaps.\n"
+        "- If multiple items repeat the same info, avoid repetition.\n"
+        "- If items conflict, explicitly say there is a conflict and attribute each claim to its corpus_id/source.\n"
+        "- If the answer is not contained in the provided context, say you could not find it in the selected corpora.\n\n"
+        f"Retrieved context (JSON list, best-first):\n{context_json}"
     )
 
 
@@ -512,7 +596,7 @@ async def register_mcp_server(
     # build new DB entry
     mcp_server = MCPServer(name=name, kind=kind, transport=transport, enabled=enabled, config=config)
 
-    # --- build relations (THIS writes join tables on commit) ---
+    # build relations (this writes join tables on commit)
     required_role_names = [x for x in _ensure_list(payload.get("required_roles"))]
     allowed_usernames = [x for x in _ensure_list(payload.get("allowed_users"))]
 
@@ -547,7 +631,7 @@ async def register_mcp_server(
         await db.rollback()
         raise
 
-    # optionally load generated id/relationships
+    # load generated id/relationships
     await db.refresh(mcp_server)
 
     return {"id": mcp_server.id, "name": mcp_server.name}
@@ -726,12 +810,13 @@ async def api_chat(
         tools_for_model = []
 
     system_instruction = "Rely on your own capabilities and give you best effort."
+    payload_summaries = []
 
     # retrieve information from all selected corpora in auto-search
     if payload.auto_search:
-        corpora = [payload.corpora[0]] # TODO only single corpus look up for presentation. since unsure how multiple responses are handled
+        corpora =  payload.corpora
         if not corpora:
-            raise HTTPException(status_code=400, detail="Missing corpus_id for auto search")
+            raise HTTPException(status_code=400, detail="Missing corpus_id(s) for auto search")
 
         for corpus_id in corpora:
             _, corpus = await get_user_and_corpus_or_404(db, username=username, corpus_id=corpus_id)
@@ -747,13 +832,17 @@ async def api_chat(
             }
 
             search_result = await mcp_client.call_tool(
-                "document_retrieval.search",
+                "document_retrieval.search",  # todo: if not in available tools, log it accordingly
                 payload_,
             )
             payload_data = extract_tool_payload(search_result)
-            system_instruction = build_retrieval_instruction(payload_data)
+            normalized_payload = normalize_retrieval_payload(payload=payload_data)
+            payload_summaries.append(normalized_payload)
 
+        best_chunks = select_best_chunks(payload_summaries, max_total=max(8, len(payload.corpora)), min_per_corpus=1)  # todo: make static max=8 adjustable?
+        system_instruction = build_multi_instruction(best_chunks=best_chunks)
 
+    # route query incl. collected & optimized context to the LLM
     text = await mcp_client.process_query(
         query=msg,
         enabled_tools=tools_for_model,
