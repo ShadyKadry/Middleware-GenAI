@@ -59,6 +59,7 @@ input[type="checkbox"] {
 
 .upload-status {
   margin-top: 8px;
+  white-space: pre-line;
 }
 
 .upload-status.ok {
@@ -67,6 +68,24 @@ input[type="checkbox"] {
 
 .upload-status.err {
   color: #b00;
+}
+
+.status-attrs {
+  margin: 0 0 2px 28px; /*10*/
+  padding-left: 8px;
+}
+
+.status-attrs li {
+  margin: 2px 0;
+  line-height: 0.2;
+}
+
+.status-attrs b {
+  font-weight: 600;
+}
+
+.status-note {
+  margin: 0;
 }
 
 

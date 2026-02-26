@@ -1,4 +1,3 @@
-import logging
 import os
 import sys
 from contextlib import AsyncExitStack
@@ -12,7 +11,6 @@ from google.genai.types import Tool, FunctionDeclaration
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-#logger = logging.getLogger(__name__)
 
 UNSUPPORTED_JSON_SCHEMA_KEYS_FOR_GEMINI = {
     "$schema",
@@ -23,7 +21,7 @@ UNSUPPORTED_JSON_SCHEMA_KEYS_FOR_GEMINI = {
 class MCPClient:
 
     def __init__(self, user_id:str, role:str):
-        self.model_name = "gemini-2.5-flash"  # change if more are supported at one point or different models of gemini are selectable
+        self.model_name = "gemini-2.5-flash"  # change if more are supported at one point or different gemini models are selectable
         self.user_id = user_id
         self.role = role
         self.session: Optional[ClientSession] = None
@@ -170,6 +168,5 @@ def convert_mcp_tools_to_gemini(tools) -> list:
         )
         gemini_tool = Tool(function_declarations=[function_declaration])
         gemini_tools.append(gemini_tool)
-    #logger.debug(f"Converted {len(gemini_tools)} tools to Gemini function declarations.")
 
     return gemini_tools

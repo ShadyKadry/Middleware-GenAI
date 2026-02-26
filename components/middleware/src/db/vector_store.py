@@ -110,6 +110,7 @@ class VectorStore(Protocol):
             - `vectors` and `records` MUST refer to the same items in the same order.
             - This API avoids assuming the backend uses "payloads" (Qdrant term),
               or "entities" (Milvus term), or JSONB columns (pgvector).
+            - IMPORTANT: In case of failure, each implementation should account for atomicity by removing all fragments of partial upsert
         """
         ...
 
@@ -118,7 +119,7 @@ class VectorStore(Protocol):
             collection: str,
             query_vector: List[float],
             k: int,
-            access_constraints: dict,  # additional/optional 'query_filter' for further restriction?
+            access_identifier: dict,  # additional/optional 'query_filter' for further restriction?
     ) -> List[SearchResult]:
         """
         Perform a vector similarity search with optional filtering.
@@ -133,15 +134,13 @@ class VectorStore(Protocol):
             k (int):
                 Maximum number of nearest results to return.
 
-            access_constraints (dict):
-                A filter object describing application-level restrictions
+            access_identifier (dict):
+                The identifier of a user which can get utilized for application-level restrictions
                 (e.g. {"user_id": "..."}).
                 Backends must translate this into their own filtering mechanism:
                     • Qdrant → Filter(must=[FieldCondition(...)])
                     • Milvus → boolean expression string
                     • pgvector → SQL WHERE clause
-
-                If empty or None, perform an unrestricted similarity search.
 
         Returns:
             List[Dict[str, Any]]:

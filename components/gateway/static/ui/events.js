@@ -231,17 +231,56 @@ export function wireDocumentUploadForm() {
     });
 
     const data = await res.json().catch(() => ({}));
+
     if (!res.ok) {
       if (status) {
-        status.textContent = data.detail || "Upload failed";
+        status.textContent = "Upload failed without response.";
         status.className = "upload-status err";
       }
-      return;
     }
+    else if (!data.ok) {
+      if (status) {
+        status.className = "upload-status err"; // fixme data.database_model || - - - - - - - - - - - - - - - - - - - -
 
-    if (status) {
-      status.textContent = `Uploaded ${data.chunks} chunk(s) to ${data.corpus_id} using ${data.embedding_model}.`;
-      status.className = "upload-status ok";
+        if (data.status === "Corpus already exists.") {
+          status.innerHTML = `
+            <strong>Corpus already exists.</strong><br>
+            If you want to add this document to the existing corpus, please match its specified attributes:
+            <ul class="status-attrs">
+              <li><b>Corpus ID:</b> ${data.corpus_id}</li>
+              <li><b>Database model:</b> ${"SomeDB"}</li>
+              <li><b>Embedding model:</b> ${data.embedding_model}</li>
+              <li><b>Chunk size:</b> ${data.chunk_size}</li>
+              <li><b>Chunk overlap:</b> ${data.chunk_overlap}</li>
+            </ul>
+            <p class="status-note">
+              Specified users or roles will <strong>NOT</strong> have any effect and remain as originally set for this corpus.
+            </p>
+          `;
+        } else if (data.status === "Upload to new failed!"){
+          status.innerHTML = `Upload to new corpus ${data.corpus_id} failed! Failed IDs: ${data.payload.failed_ids}`
+        } else if (data.status === "Upload to existing failed!"){
+          status.innerHTML = `Upload to existing corpus ${data.corpus_id} failed! Failed IDs: ${data.payload.failed_ids}`
+        } else {
+          status.textContent = data.status || "Upload failed.";
+        }
+      }
+    }
+    else {
+      if (status) {
+        status.className = "upload-status ok";
+
+        if (data.status === "Upload to existing succeeded!") {
+          status.innerHTML = `
+            Uploaded ${data.chunks} chunk(s) to existing corpus ${data.corpus_id} using ${data.embedding_model}.
+            <p class="status-note">
+              Please note that allowed users/roles were <strong>NOT</strong> overwritten and remain as originally set.
+            </p>
+          `;
+        } else {
+          status.textContent = `Uploaded ${data.chunks} chunk(s) to ${data.corpus_id} using ${data.embedding_model}.`;
+        }
+      }
     }
   });
 }

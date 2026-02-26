@@ -178,6 +178,8 @@ class Corpus(Base):
     name: Mapped[str] = mapped_column(Text, nullable=False)
     database_model: Mapped[str] = mapped_column(Text, nullable=False)
     embedding_model: Mapped[str] = mapped_column(Text, nullable=False)
+    chunk_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    chunk_overlap: Mapped[int] = mapped_column(Integer, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     meta: Mapped[dict[str, Any]] = mapped_column(

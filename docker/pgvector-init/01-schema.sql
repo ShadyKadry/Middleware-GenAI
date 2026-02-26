@@ -30,6 +30,8 @@ CREATE TABLE corpora (
   name TEXT NOT NULL,
   database_model TEXT NOT NULL,
   embedding_model TEXT NOT NULL,
+  chunk_size INT NOT NULL,
+  chunk_overlap INT NOT NULL,
   enabled BOOLEAN NOT NULL DEFAULT TRUE,
   meta JSONB NOT NULL DEFAULT '{}',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -89,6 +91,9 @@ CREATE INDEX IF NOT EXISTS idx_corpus_user_access_user_id
 
 CREATE INDEX IF NOT EXISTS idx_corpus_role_access_role_id
   ON corpus_role_access(role_id);
+
+CREATE UNIQUE INDEX corpora_name_unique_idx
+ON corpora (LOWER(name));
 
 
 -- VIEWS --

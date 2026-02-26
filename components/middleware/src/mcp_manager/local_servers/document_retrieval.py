@@ -15,7 +15,7 @@ def _normalize_collection_part(value: str) -> str:
 
 
 def build_collection_name(corpus_id: str, model_id: str) -> str:
-    return f"{_normalize_collection_part(corpus_id)}__{_normalize_collection_part(model_id)}"
+    return f"{_normalize_collection_part(corpus_id)}__{_normalize_collection_part(model_id)}"  # todo model if is ambiguous as well. combination of model+db is identifier.
 
 
 def build_backend():
@@ -34,7 +34,7 @@ def build_backend():
     async def upsert_docs(args: Dict[str, Any]) -> Dict[str, Any]:
         model_id = args.get("embedding_model") or DEFAULT_EMBEDDING_MODEL_ID
         database_name = args.get("database_name") or DEFAULT_DATABASE
-        collection = build_collection_name(args["corpus_id"], model_id)
+        collection = build_collection_name(args["corpus_id"], model_id)  # todo redundant? corpus id should be sufficient
         em = get_manager(model_id=model_id, database_name=database_name)
 
         documents = []
@@ -44,7 +44,7 @@ def build_backend():
             documents.append(doc_copy)
 
         return await em.upsert_documents(
-            user_id=args["user_id"],
+            uploaded_by=args["user_id"],
             corpus_id=args["corpus_id"],
             documents=documents,
             collection_name=collection,
@@ -58,6 +58,7 @@ def build_backend():
 
         return await em.search_documents(
             user_id=args["user_id"],
+            user_role=args["user_role"],
             corpus_id=args["corpus_id"],
             query=args["query"],
             k=args.get("k", 5),

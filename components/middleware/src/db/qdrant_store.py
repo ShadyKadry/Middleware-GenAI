@@ -13,20 +13,39 @@ from qdrant_client.models import FieldCondition, MatchValue
 
 
 # create Qdrant specific access filter
-def build_access_filter(access_constraints: dict) -> Optional[Filter]:
+def build_access_filter(access_identifier: dict) -> Optional[Filter]:
     """
-    Restrict read access to documents that belong to the provided constraints. (user_id only for now)
+    Verify read access to documents based on the users identifier (id/role).
     """
-    if not access_constraints or "user_id" not in access_constraints:
-        raise PermissionError("No user_id in access constraints")  # will this break app execution? should be unreachable anyways...
-    return Filter(
-        must=[
+    if not access_identifier:
+        raise PermissionError("No access identifier detected.")  # will this break app execution? should be unreachable anyways...
+    if "user_id" not in access_identifier:
+        raise PermissionError("No user_id in access identifier.")
+    if "user_role" not in access_identifier:
+        raise PermissionError("No user_role in access constraints")
+
+    user_id = access_identifier.get("user_id")
+    user_role = access_identifier.get("user_role")
+
+    should = []
+
+    if user_id:
+        should.append(
             FieldCondition(
-                key="user_id",
-                match=MatchValue(value=access_constraints["user_id"]),
+                key="allowed_users",
+                match=MatchValue(value=user_id),
             )
-        ]
-    )
+        )
+    if user_role:
+        should.append(
+            FieldCondition(
+                key="allowed_roles",
+                match=MatchValue(value=user_role),
+            )
+        )
+
+    # at least one must match
+    return Filter(should=should)
 
 
 class QdrantVectorStore(VectorStore):
@@ -52,7 +71,7 @@ class QdrantVectorStore(VectorStore):
         self,
         collection: str,
         records: List[VectorRecord],
-        ) -> UpsertResult:
+    ) -> UpsertResult:
         # create new database entries
         points: List[PointStruct] = []
         for record in records:
@@ -96,13 +115,13 @@ class QdrantVectorStore(VectorStore):
         collection: str,
         query_vector: List[float],
         k: int,
-        access_constraints: dict,
+        access_identifier: dict,
     ) -> List[SearchResult]:
         response = await self.client.query_points(
             collection_name=collection,
             query=query_vector,
             limit=k,
-            query_filter=build_access_filter(access_constraints),  # create actual Qdrant filter implementation
+            query_filter=build_access_filter(access_identifier),  # create actual Qdrant filter implementation
             with_vectors=False,
             with_payload=True,
         )
@@ -117,7 +136,7 @@ class QdrantVectorStore(VectorStore):
                 SearchResult(
                     id=p.id,  # the unique UUID point ID
                     score=p.score,  # similarity score to query_vector
-                    metadata=p.payload  # the created metadata incl. {text:"", idx:"", topic:"", user_id:""}
+                    metadata=p.payload  # the created metadata incl. {text:"", idx:"", topic:"", uploaded_by:""}
                 )
             )
 
@@ -132,7 +151,7 @@ class QdrantVectorStore(VectorStore):
             user = "user",
             collection: str = "demo_corpus",
     ) -> None:
-        """
+        """ todo move to tests?
         Creates a small demo corpus with pre-defined sentences.
         Is called once during 'middleware_application.py' startup to ingest some data into the Qdrant docker container.
         The resulting collection will only be available for queries with username: "user".

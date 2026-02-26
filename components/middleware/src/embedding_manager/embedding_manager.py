@@ -4,12 +4,13 @@ from db.vector_store import VectorStore, VectorRecord
 from .embedding_backend import EmbeddingModel
 
 
-def build_access_constraints(user_id: str) -> dict:
+def build_access_identifier(user_id: str, user_role: str) -> dict:
     """
-    Restrict read access to documents that belong to the provided user ID.
+    Build identifier for this user.
+    Contains all information which a database instance can use to grant/prevent read access to documents.
     """
 
-    return {"user_id": user_id}
+    return {"user_id": user_id, "user_role": user_role}
 
 
 class EmbeddingManager:
@@ -39,7 +40,7 @@ class EmbeddingManager:
     # ------------------------------
     async def upsert_documents(
         self,
-        user_id: str,
+        uploaded_by: str,
         corpus_id: str,
         documents: Sequence[Dict[str, Any]],
         collection_name: Optional[str] = None,
@@ -70,7 +71,7 @@ class EmbeddingManager:
             # data to store
             metadata: Dict[str, Any] = {
                 **document,
-                "user_id": user_id,
+                "uploaded_by": uploaded_by,
                 "corpus_id": corpus_id,
             }
             records.append(
@@ -97,6 +98,7 @@ class EmbeddingManager:
     async def search_documents(
         self,
         user_id: str,
+        user_role: str,
         corpus_id: str,
         query: str,
         k: int = 5,
@@ -107,14 +109,14 @@ class EmbeddingManager:
         dim = len(query_vec) if query_vec is not None else self.embedding_model.dim
 
         collection = collection_name or corpus_id
-        await self.vector_store.get_or_create_collection(collection, dim)
+        await self.vector_store.get_or_create_collection(collection, dim)  # todo should not create new collection on failed lookup - - - - - - - -
 
         # search for query_vector within database
         hits = await self.vector_store.search(
             collection=collection,  # some other backends might interpret this differently
             query_vector=query_vec,
             k=k,
-            access_constraints=build_access_constraints(user_id),  # responsibility of each backend to enforce this
+            access_identifier=build_access_identifier(user_id, user_role),  # responsibility of each backend to verify access based on this user & its role
         )
 
         return {
