@@ -265,6 +265,40 @@ export function renderChatMessage(role, text) {
   chatLog.scrollTop = chatLog.scrollHeight;
 }
 
+
+export function renderDatabaseModels(payload) {
+  const databaseEl = document.getElementById("uploadDatabaseModel")
+  if (!databaseEl) return;
+
+  // fallback UI if payload missing
+  if (!payload) {
+    databaseEl.innerHTML = "";
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "Database models unavailable";
+    databaseEl.appendChild(opt);
+  }
+
+  const models = Array.isArray(payload.models) ? payload.models : [];
+  const defaultId = typeof payload.defaultId === "string" ? payload.defaultId : "";
+
+  databaseEl.innerHTML = "";
+
+  for (const model of models) {
+    const opt = document.createElement("option");
+    opt.value = String(model.id ?? "");
+    opt.textContent = String(model.label || model.id || "");
+    databaseEl.appendChild(opt);
+  }
+
+  // Apply default (only if it exists in the options)
+  if (defaultId) {
+    const has = [...databaseEl.options].some(o => o.value === defaultId);
+    if (has) databaseEl.value = defaultId;
+  }
+}
+
+
 // private access
 function getEmbeddingModelSelects() {
   return [

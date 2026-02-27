@@ -248,13 +248,20 @@ export function wireDocumentUploadForm() {
             If you want to add this document to the existing corpus, please match its specified attributes:
             <ul class="status-attrs">
               <li><b>Corpus ID:</b> ${data.corpus_id}</li>
-              <li><b>Database model:</b> ${"SomeDB"}</li>
+              <li><b>Database model:</b> ${data.database_model}</li>
               <li><b>Embedding model:</b> ${data.embedding_model}</li>
               <li><b>Chunk size:</b> ${data.chunk_size}</li>
               <li><b>Chunk overlap:</b> ${data.chunk_overlap}</li>
             </ul>
             <p class="status-note">
               Specified users or roles will <strong>NOT</strong> have any effect and remain as originally set for this corpus.
+            </p>
+          `;
+        } else if (data.status === "Invalid name format for corpus ID!") {
+          status.innerHTML = `
+            <strong>Invalid name format for corpus ID!</strong>
+            <p class="status-note">
+              <strong>Use only:</strong> letters, numbers, and underscore. <strong>Must:</strong> start with a letter. <strong>Must not:</strong> include spaces or '-'.
             </p>
           `;
         } else if (data.status === "Upload to new failed!"){

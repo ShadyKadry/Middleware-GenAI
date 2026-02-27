@@ -1,14 +1,15 @@
 import {
   renderCorporaCheckboxesAutoSearch,
   renderCorporaCheckboxesUserCreation,
+  renderDatabaseModels,
   renderEmbeddingModels,
   renderMCPServerCheckboxesForUserCreation,
   renderMCPToolCheckboxesForChatForm,
   renderMe,
-  setAutoSearchCorporaLoading,
   renderPanels,
+  setAutoSearchCorporaLoading,
 } from "./ui/render.js";
-import {bootstrapCorpora, bootstrapMCPTools, getEmbeddingModels, getMe} from "./api.js";
+import {bootstrapCorpora, bootstrapMCPTools, getDatabaseModels, getEmbeddingModels, getMe} from "./api.js";
 import {
   wireChatForm,
   wireCorpusSelectionButtonsAutoSearch,
@@ -57,8 +58,11 @@ async function loadMe() {
   setAutoSearchCorporaLoading(true);
 
   if (isAdmin) {
-    const payload = await getEmbeddingModels().catch(() => null);
-    renderEmbeddingModels(payload);
+    // load and render dynamic drop-down values from BFF
+    const payloadDB = await getDatabaseModels().catch(() => null);
+    renderDatabaseModels(payloadDB);
+    const payloadEmb = await getEmbeddingModels().catch(() => null);
+    renderEmbeddingModels(payloadEmb);
   }
 }
 

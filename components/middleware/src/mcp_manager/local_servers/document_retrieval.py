@@ -33,7 +33,7 @@ def build_backend():
 
     async def upsert_docs(args: Dict[str, Any]) -> Dict[str, Any]:
         model_id = args.get("embedding_model") or DEFAULT_EMBEDDING_MODEL_ID
-        database_name = args.get("database_name") or DEFAULT_DATABASE
+        database_name = args.get("database_model") or DEFAULT_DATABASE
         collection = build_collection_name(args["corpus_id"], model_id)  # todo redundant? corpus id should be sufficient
         em = get_manager(model_id=model_id, database_name=database_name)
 
@@ -52,7 +52,7 @@ def build_backend():
 
     async def search_docs(args: Dict[str, Any]) -> Dict[str, Any]:
         model_id = args.get("embedding_model") or DEFAULT_EMBEDDING_MODEL_ID
-        database_name = args.get("database_name") or DEFAULT_DATABASE
+        database_name = args.get("database_model") or DEFAULT_DATABASE
         collection = build_collection_name(args["corpus_id"], model_id)
         em = get_manager(model_id=model_id, database_name=database_name)
 
@@ -74,7 +74,7 @@ def build_backend():
             "properties": {
                 "user_id": {"type": "string"},
                 "corpus_id": {"type": "string"},
-                # "database_name": {"type": "string"}, TODO since missing it will always use defalut -> Qdrant
+                "database_model": {"type": "string"},
                 "embedding_model": {"type": "string"},
                 "documents": {
                     "type": "array",
@@ -101,7 +101,7 @@ def build_backend():
             "properties": {
                 "user_id": {"type": "string"},
                 "corpus_id": {"type": "string"},
-                # "database_name": {"type": "string"}, TODO since missing it will always use defalut -> Qdrant
+                "database_model": {"type": "string"},
                 "embedding_model": {"type": "string"},
                 "query": {"type": "string"},
                 "k": {"type": "integer"},

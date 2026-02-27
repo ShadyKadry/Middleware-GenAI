@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import re
 import secrets
 import tempfile
 from pathlib import Path
@@ -53,7 +54,14 @@ REVOKED_REFRESH_TOKENS: Set[str] = set()
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# embedding models exposed in the admin UI
+# database models selectable in the admin UI
+DATABASE_MODELS = [
+    {"id": "Qdrant", "label": "Qdrant"},
+    {"id": "Pgvector", "label": "Pgvector"},
+]
+DEFAULT_DATABASE_MODEL_ID = "Qdrant"
+
+# embedding models selectable in the admin UI
 EMBEDDING_MODELS = [
     {"id": "gemini-embedding-001", "label": "Gemini embedding-001"},
     {"id": "stub-256", "label": "Stub (deterministic, 256d)"},
@@ -660,7 +668,13 @@ async def register_mcp_server(
     return {"id": mcp_server.id, "name": mcp_server.name}
 
 
-@app.get("/api/admin/embedding-models")
+@app.get("/api/admin/database-models")  # TODO do the same for DB models
+def list_database_models(principal: dict = Depends(current_principal)):
+    _require_admin(principal)
+    return {"models": DATABASE_MODELS, "default": DEFAULT_DATABASE_MODEL_ID}
+
+
+@app.get("/api/admin/embedding-models")  # TODO do the same for DB models
 def list_embedding_models(principal: dict = Depends(current_principal)):
     _require_admin(principal)
     return {"models": EMBEDDING_MODELS, "default": DEFAULT_EMBEDDING_MODEL_ID}
@@ -671,6 +685,7 @@ async def upload_documents(
     principal: dict = Depends(current_principal),
     file: UploadFile = File(...),
     corpus_id: str = Form(...),
+    database_model: str = Form(DEFAULT_DATABASE_MODEL_ID),
     embedding_model: str = Form(DEFAULT_EMBEDDING_MODEL_ID),
     chat_session_id: str = Form(...),
     allowed_user_ids: Optional[str] = Form(None),  # todo follow the 'allowed_roles' pattern. requires checkbox selection in UI first...
@@ -718,121 +733,129 @@ async def upload_documents(
     result = None
     payload = None
 
-    stmt = select(
-        Corpus.id,
-        Corpus.database_model,
-        Corpus.embedding_model,
-        Corpus.chunk_size,
-        Corpus.chunk_overlap,
-        Corpus.enabled,
-    ).where(func.lower(Corpus.name) == corpus_id.lower())
-    existing_corpus = (await db.execute(stmt)).one_or_none()
-    await db.rollback()  # end implicit transaction from the SELECT
-    database_model = "Qdrant"  # TODO hardcode for presentation purpose. later this will be dynamic between "Pgvector" and "Qdrant" based on dropdown UI element
-
-    # at this point 3 scenarios can happen
-    if existing_corpus:
-        # check whether all other parameters match (i.e. DB, EM, chunk-size, overlap)
-        existing_id, db_model, emb_model, cs, ov, enabled = existing_corpus
-
-        mismatches = []
-        if db_model != database_model:
-            mismatches.append(("database_model", db_model, database_model))
-        if emb_model != embedding_model:
-            mismatches.append(("embedding_model", emb_model, embedding_model))
-        if cs != chunk_size:
-            mismatches.append(("chunk_size", cs, chunk_size))
-        if ov != chunk_overlap:
-            mismatches.append(("overlap", ov, chunk_overlap))
-
-        if mismatches:
-            # 1.) collection/corpus already exists and not all/none parameters match -> inform user that parameters must match to add to existing corpus
-            corpus_id = existing_id
-            status_msg = "Corpus already exists."
-            database_model = db_model
-            embedding_model = emb_model
-            chunk_size = cs
-            chunk_overlap = ov
-        else:
-            # 2.) collection/corpus already exists and all parameters match (i.e. DB, EM, chunk-size, overlap) -> add to existing corpus
-
-            # fetch already set access control (allowed users + roles) for this corpus (will not be overwritten by UI input to avoid inconsistencies within the corpora)
-            acl_stmt = (
-                select(Corpus)
-                .where(Corpus.id == existing_id)
-                .options(
-                    selectinload(Corpus.users_with_access),
-                    selectinload(Corpus.roles_with_access),
-                )
-            )
-            corpus_obj = (await db.execute(acl_stmt)).scalars().one()
-            users_with_access = ";".join(u.username for u in corpus_obj.users_with_access)
-            roles_with_access = [r.name for r in corpus_obj.roles_with_access]
-
-            result = await mcp_client.call_tool(
-                "document_retrieval.upsert",
-                {
-                    "user_id": target_user_id,
-                    "corpus_id": existing_id,
-                    "embedding_model": embedding_model,
-                    "documents": build_documents(chunks=chunks,filename=filename, file_hash=file_hash, content_type=file.content_type, allowed_user_ids=users_with_access, allowed_roles=roles_with_access)
-                },
-            )
-            payload = extract_tool_payload(result)
-
-            if payload.get("status") == "error":
-                status_msg = "Upload to existing failed!"
-            else:
-                uploaded = True
-                status_msg = "Upload to existing succeeded!"
-                corpus_id = existing_id
+    if not re.compile(r"^[a-zA-Z][a-zA-Z0-9_]*$").match(corpus_id):
+        # todo: simplistic approach. e.g. hr__guidelines & hr_guidelines are 2 different corpora. might be confusing with increasing amount of documents & users
+        status_msg= "Invalid name format for corpus ID!"
     else:
-        # 3.) collection/corpus does not exist -> create new corpus
-        corpus = Corpus(id=corpus_id, name=corpus_id, embedding_model=embedding_model, database_model=database_model, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-        try:
-            async with db.begin():
-                # assign roles that should have access to this document
-                roles_list = list(allowed_roles or [])
-                roles_list.extend(["Admin", "Super-Admin"])  # admins are allowed to see all documents TODO might tighten this assumption at some point
-                role_names = [r.strip() for r in roles_list if r and r.strip()]
-                role_names = list(dict.fromkeys(role_names))
+        stmt = select(
+            Corpus.id,
+            Corpus.database_model,
+            Corpus.embedding_model,
+            Corpus.chunk_size,
+            Corpus.chunk_overlap,
+            Corpus.enabled,
+        ).where(func.lower(Corpus.name) == corpus_id.lower())
+        existing_corpus = (await db.execute(stmt)).one_or_none()
+        await db.rollback()  # end implicit transaction from the SELECT
 
-                existing_roles = list(await db.scalars(select(Role).where(Role.name.in_(role_names))))
-                found = {er.name for er in existing_roles}
+        # at this point 3 scenarios can happen
+        if existing_corpus:
+            # check whether all other parameters match (i.e. DB, EM, chunk-size, overlap)
+            existing_id, db_model, emb_model, cs, ov, enabled = existing_corpus
 
-                missing = sorted(set(role_names) - found)
-                if missing:
-                    raise HTTPException(status_code=400, detail=f"Unknown access roles: {', '.join(missing)}")
-                corpus.roles_with_access.extend(existing_roles)
+            mismatches = []
+            if db_model != database_model:
+                mismatches.append(("database_model", db_model, database_model))
+            if emb_model != embedding_model:
+                mismatches.append(("embedding_model", emb_model, embedding_model))
+            if cs != chunk_size:
+                mismatches.append(("chunk_size", cs, chunk_size))
+            if ov != chunk_overlap:
+                mismatches.append(("overlap", ov, chunk_overlap))
 
-                db.add(corpus)
-                await db.flush()  # push INSERTs to DB so FK/constraints/association rows are checked (not committed yet)
+            if mismatches:
+                # 1.) collection/corpus already exists and not all/none parameters match -> inform user that parameters must match to add to existing corpus
+                corpus_id = existing_id
+                status_msg = "Corpus already exists."
+                database_model = db_model
+                embedding_model = emb_model
+                chunk_size = cs
+                chunk_overlap = ov
+            else:
+                # 2.) collection/corpus already exists and all parameters match (i.e. DB, EM, chunk-size, overlap) -> add to existing corpus
+
+                # fetch already set access control (allowed users + roles) for this corpus (will not be overwritten by UI input to avoid inconsistencies within the corpora)
+                acl_stmt = (
+                    select(Corpus)
+                    .where(Corpus.id == existing_id)
+                    .options(
+                        selectinload(Corpus.users_with_access),
+                        selectinload(Corpus.roles_with_access),
+                    )
+                )
+                corpus_obj = (await db.execute(acl_stmt)).scalars().one()
+                users_with_access = ";".join(u.username for u in corpus_obj.users_with_access)
+                roles_with_access = [r.name for r in corpus_obj.roles_with_access]
 
                 result = await mcp_client.call_tool(
                     "document_retrieval.upsert",
                     {
                         "user_id": target_user_id,
-                        "corpus_id": corpus_id,
+                        "corpus_id": existing_id,
+                        "database_model": database_model,
                         "embedding_model": embedding_model,
-                        "documents": build_documents(chunks=chunks,filename=filename, file_hash=file_hash, content_type=file.content_type, allowed_user_ids=allowed_user_ids, allowed_roles=role_names)
+                        "documents": build_documents(chunks=chunks,filename=filename, file_hash=file_hash, content_type=file.content_type, allowed_user_ids=users_with_access, allowed_roles=roles_with_access)
                     },
                 )
                 payload = extract_tool_payload(result)
 
-                if payload.get("status")=="error":
-                    raise Exception("Upload to new failed!")  # fixme for atomicity: assumption that no partial inserts will have happened
+                if payload.get("status") == "error":
+                    status_msg = "Upload to existing failed!"
                 else:
                     uploaded = True
-                    status_msg = "Upload to new succeeded!"
-        except HTTPException:
-            raise  # re-raise so FastAPI can return the proper status code
-        except Exception as e:
-            status_msg = str(e)
+                    status_msg = "Upload to existing succeeded!"
+                    corpus_id = existing_id
+        else:
+            # 3.) collection/corpus does not exist -> create new corpus
+            corpus = Corpus(id=corpus_id, name=corpus_id, embedding_model=embedding_model, database_model=database_model, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+            try:
+                async with db.begin():
+                    # assign roles that should have access to this document
+                    roles_list = list(allowed_roles or [])
+                    roles_list.extend(["Admin", "Super-Admin"])  # admins are allowed to see all documents TODO might tighten this assumption at some point
+                    role_names = [r.strip() for r in roles_list if r and r.strip()]
+                    role_names = list(dict.fromkeys(role_names))
+
+                    existing_roles = list(await db.scalars(select(Role).where(Role.name.in_(role_names))))
+                    found = {er.name for er in existing_roles}
+
+                    missing = sorted(set(role_names) - found)
+                    if missing:
+                        raise HTTPException(status_code=400, detail=f"Unknown access roles: {', '.join(missing)}")
+                    corpus.roles_with_access.extend(existing_roles)
+
+                    db.add(corpus)
+                    await db.flush()  # push INSERTs to DB so FK/constraints/association rows are checked (not committed yet)
+
+                    result = await mcp_client.call_tool(
+                        "document_retrieval.upsert",
+                        {
+                            "user_id": target_user_id,
+                            "corpus_id": corpus_id,
+                            "database_model": database_model,
+                            "embedding_model": embedding_model,
+                            "documents": build_documents(chunks=chunks,filename=filename, file_hash=file_hash, content_type=file.content_type, allowed_user_ids=allowed_user_ids, allowed_roles=role_names)
+                        },
+                    )
+                    payload = extract_tool_payload(result)
+
+                    if not isinstance(payload, dict):
+                        raise Exception(f"Middleware internal error: {payload}")
+                    elif payload.get("status")=="error":
+                        raise Exception("Upload to new failed!")  # fixme for atomicity: assumption that no partial inserts will have happened
+                    else:
+                        uploaded = True
+                        status_msg = "Upload to new succeeded!"
+            except HTTPException:
+                raise  # re-raise so FastAPI can return the proper status code
+            except Exception as e:
+                status_msg = str(e)
 
     return {
         "ok": uploaded,
         "status": status_msg,
         "corpus_id": corpus_id,
+        "database_model": database_model,
         "embedding_model": embedding_model,
         "chunks": len(chunks),
         "chunk_size": chunk_size,
@@ -938,7 +961,7 @@ async def api_chat(
                 "user_role": userrole,
                 "corpus_id": f"{corpus_id}",
                 "embedding_model": corpus.embedding_model,
-                # "database_model": corpus.database_model,
+                "database_model": corpus.database_model,
                 "query": msg,
                 "k": search_k,
             }

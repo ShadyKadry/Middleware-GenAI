@@ -21,6 +21,27 @@ export async function getEmbeddingModels() {
 
 
 /**
+ * API: Fetches available database models and default model ID.
+ * @returns {{ models: Array, defaultId: string } | null}
+ */
+export async function getDatabaseModels() {
+  const res = await fetch("/api/admin/database-models", {
+    credentials: "include",
+  });
+
+  if (!res.ok) return null;
+
+  const data = await res.json().catch(() => null);
+  if (!data || typeof data !== "object") return null;
+
+  const models = Array.isArray(data.models) ? data.models : [];
+  const defaultId = typeof data.default === "string" ? data.default : (models[0]?.id ?? "");
+
+  return { models, defaultId };
+}
+
+
+/**
  * API: Fetches the current authenticated user info.
  * @returns {Object | null}
  */
