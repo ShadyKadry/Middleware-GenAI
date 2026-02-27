@@ -1,143 +1,173 @@
-# Admin Ingestion and Retrieval (Gateway + Middleware)
+﻿# Admin Ingestion and Retrieval (Gateway + Middleware)
 
 ## Overview
-This document explains the admin ingestion flow, embedding model selection, and auto pre-search behavior that keeps retrieval consistent during chat. It is meant for new contributors and for anyone debugging data ingestion or retrieval.
+This document describes the current ingestion and retrieval implementation.
+It focuses on what is implemented in code now, including access control, corpus handling, and auto pre-search.
 
 Key ideas:
-- The gateway handles uploads and UI.
-- The middleware performs embeddings and writes to the vector DB.
-- Qdrant stores vectors in per-model collections to avoid dimension conflicts.
+- Gateway handles admin UI, upload parsing/chunking, and chat orchestration.
+- Middleware handles embedding + vector upsert/search via MCP tool calls.
+- PostgreSQL stores users/roles, MCP server registry, and corpus metadata/access.
+- Qdrant stores vectorized document chunks.
 
 ## Goals
-- Allow admins to upload large amounts of text data (.txt) from the web UI.
-- Support multiple embedding models in parallel.
-- Keep retrieval consistent by running search before the LLM answer (when enabled).
+- Allow admins to upload documents from the web UI.
+- Support multiple embedding models.
+- Keep chat retrieval stable with optional auto pre-search.
+- Enforce user/role-based access for tools and corpora.
 
 ## Architecture
-The system has two main pieces:
-- Gateway (FastAPI + UI): collects uploads, runs chat, and calls middleware tools.
-- Middleware (MCP server): embeds text, writes to Qdrant, and exposes tools.
+Main components:
+- Gateway (FastAPI + frontend): `components/gateway`
+- Middleware (MCP server): `components/middleware/src/middleware_application.py`
+- Relational DB (PostgreSQL in `pgvector` container): users/roles/mcp_servers/corpora
+- Vector DB (Qdrant): embedded chunks
 
-Data is always written via the middleware tool `document_store.documents.upsert`. The gateway does not write to Qdrant directly.
+Important separation:
+- Gateway never writes vectors directly.
+- Gateway always writes through middleware tool `document_retrieval.upsert`.
 
 ## Embedding Models
-Model registry lives in:
+Model registry:
 - `components/middleware/src/embedding_manager/embedding_backend.py`
 
 Current models:
-- `gemini-embedding-001` (real embeddings, requires `GEMINI_API_KEY`)
-- `stub-256` (deterministic test model)
+- `gemini-embedding-001`
+- `stub-256`
 
-Important rule:
-- The same `embedding_model` used for upload must be used for search. Otherwise, search hits a different collection and returns no results.
+Default model used by upload UI:
+- `gemini-embedding-001`
 
-## Qdrant Collection Naming
-Each embedding model has its own collection to support different vector sizes.
+## Database Backends
+Database registry exists in:
+- `components/middleware/src/embedding_manager/embedding_backend.py`
 
-Collection naming:
-- `collection = f"{corpus_id}__{model_id}"`
+Available backends in code:
+- `Qdrant`
+- `Pgvector`
+
+Current upload flow behavior:
+- Gateway currently persists corpus `database_model` as `Qdrant` (hardcoded in upload endpoint).
+
+## Collection Naming in Qdrant
+To avoid dimension conflicts across models, vectors are stored in per-model collections:
+- `<corpus_id>__<embedding_model>`
 
 Implemented in:
-- `components/middleware/src/mcp_manager/mcp_manager.py`
+- `components/middleware/src/mcp_manager/local_servers/document_retrieval.py`
+
+## Tool APIs Used by Gateway
+Current tool names:
+- `document_retrieval.upsert`
+- `document_retrieval.search`
+
+Tool definitions:
+- `components/middleware/src/mcp_manager/local_servers/document_retrieval.py`
 
 ## Admin Upload Flow
-1) Admin opens the upload panel in the UI.
-2) Uploads a file (e.g., `.txt`, `.pdf`, `.pptx`, `.docx`) and selects a corpus and embedding model.
-3) Gateway converts the file to Markdown (if needed), chunks it, and calls the middleware tool:
-   - `document_store.documents.upsert`
-4) Middleware embeds each chunk and writes to Qdrant.
-
-Gateway upload endpoint:
+Endpoint:
 - `POST /api/admin/documents/upload`
 
-Files:
-- UI: `components/gateway/templates/app.html`
-- JS: `components/gateway/static/main.js`
-- API: `components/gateway/app/main.py`
+Implementation:
+- `components/gateway/app/main.py`
 
-### File Conversion (Multi-type Support)
-Non-text formats (PDF, PPTX, DOCX, etc.) are converted to Markdown using `markitdown` before chunking.
+Flow:
+1. Admin submits upload form (file, corpus id, model, chunk settings, optional access rules).
+2. Gateway checks admin role and chat session (`chat_session_id` is required).
+3. File conversion:
+   - `.txt/.md/.markdown`: direct decode
+   - other formats (pdf/pptx/docx/...): converted via MarkItDown to Markdown
+4. Gateway chunks text (`chunk_size`, `chunk_overlap`).
+5. Gateway creates/validates corpus metadata in PostgreSQL.
+6. Gateway calls `document_retrieval.upsert` via middleware MCP session.
+7. Middleware embeds chunks and upserts vectors into Qdrant.
 
-Why Markdown:
-- A single normalized text format keeps downstream chunking and embedding logic simple.
-- Most rich document formats can be flattened into readable, linear text.
+Corpus behavior:
+- If corpus exists with mismatched parameters (`database_model`, `embedding_model`, `chunk_size`, `chunk_overlap`), upload is rejected as "Corpus already exists." and no write occurs.
+- If corpus exists with matching parameters, upload appends/updates documents in the same corpus.
+- For existing corpora, upload does not overwrite existing corpus ACL settings.
 
-If `markitdown` is missing, the upload API will return an error for non-text formats.
+## File Conversion (Multi-type Support)
+Conversion helper:
+- `convert_upload_to_markdown` in `components/gateway/app/main.py`
 
-### Chunking Strategy
-Chunking happens in the gateway before embeddings. Defaults:
-- `chunk_size = 1200` characters
-- `chunk_overlap = 200` characters
+Dependency:
+- `markitdown` (in requirements)
 
-Rationale:
-- Smaller chunks improve retrieval precision.
-- Overlap keeps context across boundaries.
+If unavailable, non-text uploads fail with an explicit server error.
+
+## Chunking Strategy
+Chunking happens in Gateway before embedding.
+Defaults:
+- `chunk_size = 1200`
+- `chunk_overlap = 200`
+
+Function:
+- `chunk_text` in `components/gateway/app/main.py`
 
 ## Auto Pre-Search in Chat
-Problem: LLMs do not always call tools.
-Solution: When enabled, the gateway pre-calls search and injects results into the model prompt.
+Chat endpoint:
+- `POST /api/chat`
 
-How it works:
-1) Chat request includes `auto_search`, `corpus_id`, `embedding_model`, and `search_k`.
-2) Gateway runs `document_store.documents.search`.
-3) Results are injected into a system instruction for Gemini.
-4) Gemini answers using that context.
+Behavior when `auto_search=true`:
+1. Gateway loads selected corpora IDs from request.
+2. For each corpus, Gateway validates user access (`get_user_and_corpus_or_404`).
+3. Gateway calls `document_retrieval.search` once per corpus.
+4. Results are normalized and merged/ranked (`select_best_chunks`).
+5. Gateway builds a system instruction from best chunks and sends it to Gemini.
 
-Chat UI controls:
-- Auto pre-search toggle
-- Corpus ID
-- Embedding model
-- Top K
+Important current behavior:
+- Chat auto-search uses each corpus's configured embedding model from PostgreSQL.
+- There is no chat-side embedding-model selector in the current UI.
 
-Files:
-- UI: `components/gateway/templates/app.html`
-- JS: `components/gateway/static/main.js`
-- API + logic: `components/gateway/app/main.py`
-- Gemini system instruction: `components/gateway/app/mcp_client.py`
+Relevant files:
+- `components/gateway/app/main.py`
+- `components/gateway/app/mcp_client.py`
+- `components/gateway/static/main.js`
 
-## Stored Document Shape
-Each chunk stored in Qdrant includes:
+## Access Control
+There are two access control layers:
+
+1) Tool/server access:
+- Middleware loads only MCP servers granted to the user (directly or via role).
+- Source: PostgreSQL view `vw_mcp_servers_effective_by_username`.
+
+2) Corpus/document retrieval access:
+- Gateway enforces corpus-level access (user/role) before search.
+- Qdrant search applies payload filter on `allowed_users` / `allowed_roles`.
+
+## Stored Chunk Shape (Qdrant Payload)
+Each chunk payload contains at least:
+- `id`
 - `text`
-- `user_id`
+- `source`
+- `source_type`
+- `chunk_index`
+- `allowed_users`
+- `allowed_roles`
+- `uploaded_by`
 - `corpus_id`
 - `embedding_model`
-- `source` (file name)
-- `chunk_index`
-- `id` (file name + index)
-
-## Tool Schemas
-Middleware tools now accept `embedding_model`:
-- `document_store.documents.upsert`
-- `document_store.documents.search`
-
-Tool definitions live in:
-- `components/middleware/src/mcp_manager/mcp_manager.py`
 
 ## Environment Requirements
-- `GEMINI_API_KEY` must be set for `gemini-embedding-001`.
-- Qdrant must be running (`docker compose up`).
-- `markitdown[all]` must be installed to ingest PDF/PPTX/DOCX and other rich formats.
-
-## Troubleshooting
-No search results:
-- Verify the corpus ID and embedding model match the upload.
-- Confirm the collection exists in Qdrant.
-- Check that your `user_id` matches the stored payload.
-
-Model answers without retrieval:
-- Enable auto pre-search in chat.
-- Verify `corpus_id` and `embedding_model` are set in the chat controls.
+- `GEMINI_API_KEY` in `.env`
+- Docker services running:
+  - `pgvector` (relational metadata + ACL)
+  - `qdrant` (vector storage)
+- Dependencies installed from:
+  - `components/middleware/requirements.txt`
 
 ## Testing Checklist
-1) Upload a file with corpus ID `demo_corpus` and `gemini-embedding-001`.
-2) Enable auto pre-search in chat.
-3) Ask a question contained in the uploaded text.
-4) Confirm the answer uses the retrieved content.
+1. Start services: `docker compose up`.
+2. Start app: `uvicorn components.gateway.app.main:app --reload --host 0.0.0.0 --port 8000`.
+3. Log in as admin.
+4. Bootstrap chat (open app page and wait for tools/corpora load).
+5. Upload a document to a corpus.
+6. Enable auto pre-search and select that corpus.
+7. Ask a question contained in the uploaded text.
+8. Verify response reflects retrieved content.
 
-## Where to Extend
-Add more embedding models:
-- Register in `components/middleware/src/embedding_manager/embedding_backend.py`
-- Add to UI list in `components/gateway/app/main.py`
-
-Adjust chunking:
-- Update `chunk_text` in `components/gateway/app/main.py`
+## Known Gaps / TODOs (from current code)
+- Chat sessions are stored in-memory (`CHAT_SESSIONS`), not persisted.
+- Upload currently reads full file into RAM before processing.
+- Gateway currently hardcodes new corpus `database_model` to `Qdrant`.

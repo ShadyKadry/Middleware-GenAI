@@ -1,51 +1,111 @@
-
-# Middleware for GenAI
+﻿# Middleware for GenAI (Gateway)
 
 ---
 
 ## Prerequisites
 
-Before starting you need to ensure you have the following on your machine:
-* **Google AI API Key**: The free API key lets you integrate gemini models into Dive AI.
-  * Tutorial on how to get it: [here](https://www.youtube.com/watch?v=prrb0hsfI60&t=9s)
-  * Note: At the moment only Gemini models are supported and `Gemini 2.5 flash` is hardcoded (cannot be changed by user only be editing code)
-* **Docker Desktop**: To start the docker engine and make `docker` command available.
-* **GitHub repository**: You should have the complete repository on your machine.
-* **Python**: Self-explanatory I guess.
+Before starting, ensure the following are available:
+
+- **Python 3.12**
+- **Docker Desktop** (Docker daemon running)
+- **Google AI API key** (`GEMINI_API_KEY`)
+- **Repository checkout** of this project
 
 ---
 
-## Set-Up
+## Setup
 
-1. Navigate to the root of the repository (in terminal) and paste your **Google AI API Key** into an `.env` file i.e. `GEMINI_API_KEY=YOUR_API_KEY`. (otherwise the chat will not work)
-2. Start the middleware server dependencies by executing `docker compose up` (in terminal). This will start two DBs (i.e. Qdrant and Pgvector). Furthermore you should add `wikipedia` and `youtube_transcript` MCP servers in Docker Desktop.
-3. Start the web application by executing `uvicorn components.gateway.app.main:app --reload --host 0.0.0.0 --port 8000` in the terminal.
-4. The terminal logs will display the port the application is running on. (if http://0.0.0.0:8000 doesn't work, try http://127.0.0.1:8000 or http://localhost:8000 )
-5. You should see a **login** formular. Login with user=`user` and password=`userpass`.
-6. The available tools will be loaded (i.e. the connection to the middleware is initiated and available subset of tools retrieved that is allowed for this user/role ) which can take a couple of seconds.
-7. By (un)checking the checkboxes next to the available tools, you can control which tools will be considered for the next answer.
+1. From the repository root, add your API key to `.env`:
+   ```
+   GEMINI_API_KEY=YOUR_API_KEY
+   ```
+2. Create and activate a virtual environment (if not already available):
+   ```
+   python -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   ```
+3. Install dependencies:
+   ```
+   pip install -r components/middleware/requirements.txt
+   ```
+4. Start infrastructure services (PostgreSQL/pgvector + Qdrant):
+   ```
+   docker compose up
+   ```
+5. Start the Gateway app:
+   ```
+   uvicorn components.gateway.app.main:app --reload --host 0.0.0.0 --port 8000
+   ```
+6. Open `http://127.0.0.1:8000` and log in.
 
+Seeded default login (fresh DB initialization):
+- `Admin` / `adminpass`
+
+Note: if the Postgres volume already existed, credentials and seed data may differ from defaults.
 
 ---
 
-## Running the current system
+## Architecture At A Glance
 
-1. Type in your prompt in the chat window and hit enter. (please be advised that sometimes it'll fail as the setup is not completely stable yet, if that happens try another prompt)
+- **Gateway (`components/gateway`)**
+  - FastAPI app + HTML/JS UI
+  - Handles login/JWT cookies
+  - Manages chat sessions and UI state bootstrapping
+  - Provides admin APIs (user creation, MCP server registration, document upload)
+- **Middleware (`components/middleware`)**
+  - Started by Gateway as an MCP subprocess per chat session
+  - Builds user-specific tool registry from allowed MCP servers
+- **Relational DB (PostgreSQL service `pgvector`)**
+  - Stores users, roles, MCP server registry, corpus metadata and access control
+- **Vector DB (Qdrant service `qdrant`)**
+  - Stores embedded document chunks used by retrieval
 
-For a detailed overview of how the systems runs internally have a look at the "Sequence flow chart" section below.
+---
 
-### Examples - MCP usage
-Some examples you could ask are the following:
+## Main Workflows
 
-Transcript an Obama speech:
-```
-Prompt: hi, can you give me the transcript to the following YouTube video: https://www.youtube.com/watch?v=PnoXK77p3sM
-```
-Documentation overview of Apache Spark GitHub repository:
-```
-Prompt: could you give me the wiki structure of apache/spark?
-```
-etc.
-## Sequence flow chart
+### 1) Login + bootstrap
+
+1. User logs in via `/api/login` (alias of `/api/auth/login`).
+2. Gateway issues JWT cookies.
+3. UI calls `/api/chat/bootstrap`:
+   - creates a chat session
+   - starts middleware subprocess via MCP
+   - loads available tools for this user
+4. UI calls `/api/corpora/bootstrap` to load corpora accessible to this user.
+
+### 2) Chat
+
+1. User sends message via `/api/chat`.
+2. Optional auto pre-search (`auto_search=true`):
+   - Gateway calls `document_retrieval.search` for selected corpora.
+   - Results are normalized/ranked and injected as system instruction.
+3. Gateway calls Gemini with selected tools and returns final text response.
+
+### 3) Admin document ingestion
+
+1. Admin uploads document via `/api/admin/documents/upload`.
+2. Gateway converts non-text files to Markdown using MarkItDown.
+3. Content is chunked and upserted through middleware tool `document_retrieval.upsert`.
+4. Vectors are stored in Qdrant; corpus metadata/access is stored in PostgreSQL.
+
+### 4) Admin MCP server registration
+
+1. Admin submits MCP server config via `/api/admin/mcp-servers`.
+2. Config is persisted in PostgreSQL.
+3. Newly registered tools become available after re-bootstrap/new chat session.
+
+---
+
+## UI Entry Points
+
+- Login page: `/`
+- Main app: `/app`
+- Main client script: `components/gateway/static/main.js`
+- Main template: `components/gateway/templates/app.html`
+
+---
+
+## Sequence Diagram
+
 ![System sequence diagram](../../docs/diagrams/sequence_flow_chart.png)
-
