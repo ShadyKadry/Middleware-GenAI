@@ -543,6 +543,7 @@ async def admin_create_user(
     )
 
     # 3.) add selected MCP servers to 'mcp_servers_user_access' table
+    payload.tools.append("document_retrieval")  # add document_retrieval to allow searching for all users
     tools = getattr(payload, "tools", None)
     if tools:
         server_names = [t.strip() for t in tools if t and t.strip()]
@@ -892,10 +893,12 @@ async def chat_bootstrap(
     tools_ui = []
     for tool in tools:  # tools is List[Tool]
         for fd in (tool.function_declarations or []):
-            tools_ui.append({
-                "name": fd.name,
-                "description": getattr(fd, "description", "") or ""
-            })
+            # the RAG and data upload are not exposed as callable MCP tools -> integrated into respective panels in UI
+            if fd.name not in ("document_retrieval.upsert", "document_retrieval.search"):
+                tools_ui.append({
+                    "name": fd.name,
+                    "description": getattr(fd, "description", "") or ""
+                })
 
     return { "chat_session_id": chat_session_id, "tools_ui": tools_ui }
 
