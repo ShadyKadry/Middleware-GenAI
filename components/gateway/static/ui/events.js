@@ -11,17 +11,17 @@ import {
   getAvailableCorporaList,
   getAvailableToolsList,
   getChatSessionID,
-  getCurrentRole,
   getCurrentUser,
   getSelectedAutoSearchEnabled,
   getSelectedAutoSearchK,
   getSelectedCorpusIdsForAutoSearch,
   getSelectedTools,
+  isUserAdmin,
+  resetStateToDefault,
   setSelectedAutoSearchEnabled,
   setSelectedAutoSearchK,
   setSelectedCorpusIdsForAutoSearch,
-  setSelectedTools,
-  resetStateToDefault
+  setSelectedTools
 } from "../session/state.js";
 
 
@@ -36,7 +36,7 @@ export function wireSidebarNavigation() {
     if (!btn) return;
 
     const targets = btn.dataset.target;
-    const isAdmin = ["admin", "super-admin"].includes(getCurrentRole());
+    const isAdmin = isUserAdmin();
     if (!isAdmin) {
       const wantsAdminPanel = targets
         .split(",")

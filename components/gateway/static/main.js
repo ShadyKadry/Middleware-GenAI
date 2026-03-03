@@ -26,6 +26,7 @@ import {
   getSelectedCorpusIdsForUserCreation,
   getSelectedTools,
   initStateFromLocalStorage,
+  isUserAdmin,
   setAvailableCorpora,
   setAvailableCorporaList,
   setAvailableTools,
@@ -46,11 +47,11 @@ async function loadMe() {
   const data = await getMe().catch(() => null);
   if (!data) return;
 
-  const user = String(data.user || "").toLowerCase();
-  const role = String(data.role || "").toLowerCase();
+  const user = String(data.user || "");
+  const role = String(data.role || "");
   setCurrentUser(user, role);
 
-  const isAdmin = role === "admin" || role === "super-admin";
+  const isAdmin = isUserAdmin();
   renderMe({ user, role, isAdmin });
 
   renderPanels("panelAutoSearch,panelChat,panelTools");

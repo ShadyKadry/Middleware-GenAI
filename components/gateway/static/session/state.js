@@ -159,6 +159,14 @@ export function getCurrentUser() {
 export function getCurrentRole() {
   return CURRENT_ROLE;
 }
+export function isUserAdmin() {
+  if (!getCurrentRole()) {
+    return false;  // User does not contain a role. Admin check cannot be performed. Deflect to false...
+  }
+  else {
+    return ["Admin", "Super-Admin"].includes(getCurrentRole());
+  }
+}
 
 
 /*** Retrieves/sets the session ID. ***/
