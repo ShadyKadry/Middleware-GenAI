@@ -1,11 +1,16 @@
 import {
   getAvailableCorpora,
+  getAvailableRoles,
   getAvailableServers,
   getAvailableToolsList,
+  getSelectedAllowedRolesForDataUpload,
+  getSelectedAllowedRolesForServerRegistration,
   getSelectedCorpusIdsForAutoSearch,
   getSelectedCorpusIdsForUserCreation,
   getSelectedServers,
   getSelectedTools,
+  setSelectedAllowedRolesForDataUpload,
+  setSelectedAllowedRolesForServerRegistration,
   setSelectedCorpusIdsForAutoSearch,
   setSelectedCorpusIdsForUserCreation,
   setSelectedServers,
@@ -177,6 +182,114 @@ export function renderCorporaCheckboxesUserCreation() {
 
   // initialize hidden field
   hiddenEl.value = JSON.stringify([...selectedCorpusIdsForUserCreation]);
+}
+
+
+/**
+ * Renders the allowed-roles checkbox list in the data upload panel.
+ * Loads available roles, creates a checkbox for each, syncs the selected
+ * roles with a hidden input, and updates selection state on change.
+ */
+export function renderAllowedRolesCheckboxesDataUpload() {
+  const listEl = document.getElementById("duRolesList");
+  const hiddenEl = document.getElementById("duAllowedRoles");
+  if (!listEl || !hiddenEl) return;
+
+  listEl.innerHTML = "";
+
+  const selectedRoles = getSelectedAllowedRolesForDataUpload();
+  const roles = [...getAvailableRoles()].map(String).sort((a, b) => a.localeCompare(b));
+
+  if (roles.length === 0) {
+    listEl.innerHTML = `<div class="muted">No roles available.</div>`;
+    hiddenEl.value = "[]";
+    return;
+  }
+
+  for (const role of roles) {
+    const id = `duRole_${cssSafeId(role)}`;
+
+    const row = document.createElement("label");
+    row.className = "durole-item";
+    row.htmlFor = id;
+
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.id = id;
+    cb.value = role;
+    cb.checked = selectedRoles.has(role);
+
+    cb.addEventListener("change", () => {
+      if (cb.checked) selectedRoles.add(role);
+      else selectedRoles.delete(role);
+
+      hiddenEl.value = JSON.stringify([...selectedRoles]);
+      setSelectedAllowedRolesForDataUpload(selectedRoles);
+    });
+
+    const text = document.createElement("span");
+    text.textContent = role;
+
+    row.appendChild(cb);
+    row.appendChild(text);
+    listEl.appendChild(row);
+  }
+
+  hiddenEl.value = JSON.stringify([...selectedRoles]);
+}
+
+
+/**
+ * Renders the allowed-roles checkbox list in the MCP server registration panel.
+ * Loads available roles, creates a checkbox for each, syncs the selected
+ * roles with a hidden input, and updates selection state on change.
+ */
+export function renderAllowedRolesCheckboxesServerRegistration() {
+  const listEl = document.getElementById("srRolesList");
+  const hiddenEl = document.getElementById("srAllowedRoles");
+  if (!listEl || !hiddenEl) return;
+
+  listEl.innerHTML = "";
+
+  const selectedRoles = getSelectedAllowedRolesForServerRegistration();
+  const roles = [...getAvailableRoles()].map(String).sort((a, b) => a.localeCompare(b));
+
+  if (roles.length === 0) {
+    listEl.innerHTML = `<div class="muted">No roles available.</div>`;
+    hiddenEl.value = "[]";
+    return;
+  }
+
+  for (const role of roles) {
+    const id = `srRole_${cssSafeId(role)}`;
+
+    const row = document.createElement("label");
+    row.className = "srrole-item";
+    row.htmlFor = id;
+
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.id = id;
+    cb.value = role;
+    cb.checked = selectedRoles.has(role);
+
+    cb.addEventListener("change", () => {
+      if (cb.checked) selectedRoles.add(role);
+      else selectedRoles.delete(role);
+
+      hiddenEl.value = JSON.stringify([...selectedRoles]);
+      setSelectedAllowedRolesForServerRegistration(selectedRoles);
+    });
+
+    const text = document.createElement("span");
+    text.textContent = role;
+
+    row.appendChild(cb);
+    row.appendChild(text);
+    listEl.appendChild(row);
+  }
+
+  hiddenEl.value = JSON.stringify([...selectedRoles]);
 }
 
 

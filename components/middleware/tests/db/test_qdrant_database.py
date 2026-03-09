@@ -35,6 +35,7 @@ class TestQdrantEmbeddingManager(unittest.IsolatedAsyncioTestCase):
         query = "I would like to learn more about RAG."  # sentence is present in bootstrapped demo_corpus
         result = await self.em.search_documents(
             user_id="user",
+            user_role="Admin",
             corpus_id=corpus_id,
             query=query,
             k=5,

@@ -30,6 +30,7 @@ class TestQdrantEmbeddingManager(unittest.IsolatedAsyncioTestCase):
         """
         corpus_id = "test_upsert_corpus"
         user_id = "user_upsert"
+        user_role = "Admin"
         text = "RAG stands for retrieval augmented generation."
 
         documents = [
@@ -40,7 +41,7 @@ class TestQdrantEmbeddingManager(unittest.IsolatedAsyncioTestCase):
         ]
 
         upsert_result = await self.em.upsert_documents(
-            user_id=user_id,
+            uploaded_by=user_id,
             corpus_id=corpus_id,
             documents=documents,
         )
@@ -52,6 +53,7 @@ class TestQdrantEmbeddingManager(unittest.IsolatedAsyncioTestCase):
         # Now search for something that should clearly hit doc1
         search_result = await self.em.search_documents(
             user_id=user_id,
+            user_role=user_role,
             corpus_id=corpus_id,
             query=text,
             k=5,

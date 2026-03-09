@@ -2,12 +2,16 @@
 
 End-to-end Gateway + Middleware project for MCP-based tool orchestration and RAG retrieval.
 
+It's a modular platform that enables users to interact with large language models while dynamically integrating 
+external tools (via MCP) and document retrieval (via RAG). The system provides role-based access control, tool orchestration, 
+and vector-based semantic search.
+
 This repository contains:
 - A web Gateway (FastAPI + frontend) for login, chat, and admin operations.
 - A Middleware MCP server that aggregates user-allowed MCP backends.
 - PostgreSQL for identity, access control, MCP server registry, and corpus metadata.
 - Qdrant for vector storage and semantic retrieval.
-
+---
 ## Repository Structure
 
 - `components/gateway` - web app (API, auth, UI, chat orchestration)
@@ -16,11 +20,22 @@ This repository contains:
 - `docker/pgvector-init` - DB schema, seed data, and DB security setup
 - `docs/admin-ingestion.md` - ingestion and retrieval behavior/details
 
+---
 ## Quick Setup (Local)
 
+### Prerequisites
+Before starting you need to ensure you have the following available:
+* **Google AI API Key**: Lets you integrate gemini models.
+  * Tutorial on how to get the free-tier API key: [here](https://www.youtube.com/watch?v=prrb0hsfI60&t=9s)
+* **Docker (Desktop)**: Hosts databases and MCP servers.
+  * Preinstall following MCP servers (via `MCP Toolkit` tab):
+    * `YouTube Transcripts`
+    * `Wikipedia`
+
+### Setup
 From repository root:
 
-1. Create `.env` with Gemini API key:
+1. Create `.env` file with Gemini API key:
    ```bash
    GEMINI_API_KEY=YOUR_API_KEY
    ```
@@ -41,13 +56,20 @@ From repository root:
    ```powershell
    uvicorn components.gateway.app.main:app --reload --host 0.0.0.0 --port 8000
    ```
-6. Open:
-   - `http://127.0.0.1:8000`
+6. Open UI in browser:
+   - http://127.0.0.1:8000
+7. **Login** as systems root user (present after executing step 4 for the first time):
+   - Username: `Admin`
+   - Password: `adminpass`
 
-Default seeded admin (fresh Postgres volume):
-- Username: `Admin`
-- Password: `adminpass`
 
+## Usage
+
+A detailed walkthrough of the system and all its features is available here:
+
+=> [Feature Walkthrough](docs/walkthrough.md)
+
+---
 ## High-Level Flow
 
 1. User logs in to Gateway (`/api/login` or `/api/auth/login`).
@@ -64,6 +86,7 @@ Default seeded admin (fresh Postgres volume):
    - Text chunked and upserted through middleware tool calls.
    - Vectors stored in Qdrant; corpus metadata/access stored in PostgreSQL.
 
+---
 ## Current Databases and Responsibilities
 
 - PostgreSQL (`pgvector` service):
@@ -76,6 +99,7 @@ Default seeded admin (fresh Postgres volume):
 
 Note: Pgvector storage backend exists in code, but current ingestion flow defaults to Qdrant.
 
+---
 ## Tooling and Retrieval
 
 Current local retrieval backend exposes:
@@ -85,6 +109,7 @@ Current local retrieval backend exposes:
 Collection naming for model separation:
 - `<corpus_id>__<embedding_model>`
 
+---
 ## Documentation Map
 
 - Gateway-focused docs: `components/gateway/README_gateway.md`

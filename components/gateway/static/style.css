@@ -327,6 +327,37 @@ body.login-page {
   padding: 6px;
 }
 
+
+#panelDataUpload label[for="uploadCorpusId"],
+#panelDataUpload label[for="uploadUserId"],
+#panelDataUpload label[for="uploadDatabaseModel"],
+#panelDataUpload label[for="uploadEmbeddingModel"],
+#panelDataUpload label[for="uploadChunkSize"],
+#panelDataUpload label[for="uploadChunkOverlap"],
+#panelDataUpload label[for="uploadFile"] {
+  font-weight: 500;
+}
+
+#panelServerRegistration label[for="mcpName"],
+#panelServerRegistration label[for="mcpTransport"],
+#panelServerRegistration label[for="mcpCommand"],
+#panelServerRegistration label[for="mcpArgs"],
+#panelServerRegistration label[for="mcpServerUrl"],
+#panelServerRegistration label[for="mcpHeaders"],
+#panelServerRegistration label[for="mcpAllowedUsers"] {
+  font-weight: 500;
+}
+
+#panelServerRegistration #registerNewMCPServer #mcpStdioFields #mcpCommand label {
+  display: block;
+  margin-bottom: 20px;
+}
+
+/*#panelServerRegistration #registerNewMCPServer label.inline-field {
+  display: flex;
+  margin-bottom: 0;
+}*/
+
 /* stack the row on small screens */
 @media (max-width: 720px) {
   #uploadForm .upload-row {
@@ -337,7 +368,14 @@ body.login-page {
 /* Scope everything to the upload panel */
 #panelDataUpload #uploadForm input,
 #panelDataUpload #uploadForm select,
-#panelDataUpload #uploadForm button {
+#panelDataUpload #uploadForm button,
+#panelUserCreation #createUserForm input,
+#panelUserCreation #createUserForm select,
+#panelUserCreation #createUserForm button,
+#panelServerRegistration #registerNewMCPServer input,
+#panelServerRegistration #registerNewMCPServer select,
+#panelServerRegistration #registerNewMCPServer textarea,
+#panelServerRegistration #registerNewMCPServer button {
   font: inherit;
   border: 1px solid #ddd;
   border-radius: 10px;
@@ -347,7 +385,14 @@ body.login-page {
 /* Inputs + select look like your chat input */
 #panelDataUpload #uploadForm input[type="text"],
 #panelDataUpload #uploadForm input[type="number"],
-#panelDataUpload #uploadForm select {
+#panelDataUpload #uploadForm select,
+#panelUserCreation #createUserForm input[type="text"],
+#panelUserCreation #createUserForm input[type="password"],
+#panelUserCreation #createUserForm select,
+#panelServerRegistration #registerNewMCPServer input[type="text"],
+#panelServerRegistration #registerNewMCPServer input[type="password"],
+#panelServerRegistration #registerNewMCPServer select,
+#panelServerRegistration #registerNewMCPServer textarea {
   padding: 14px 18px;
   background: #fff;
   height: 40px;
@@ -356,18 +401,25 @@ body.login-page {
 }
 
 /* Focus style copied from #chatInput:focus */
-#panelDataUpload #uploadForm input[type="text"]:focus,
-#panelDataUpload #uploadForm input[type="number"]:focus,
+#panelDataUpload #uploadForm input:focus,
 #panelDataUpload #uploadForm select:focus,
-#panelDataUpload #uploadForm input[type="file"]:focus,
-#panelDataUpload #uploadForm button:focus {
+#panelDataUpload #uploadForm button:focus,
+#panelUserCreation #createUserForm input:focus,
+#panelUserCreation #createUserForm select:focus,
+#panelUserCreation #createUserForm button:focus,
+#panelServerRegistration #registerNewMCPServer input:focus,
+#panelServerRegistration #registerNewMCPServer select:focus,
+#panelServerRegistration #registerNewMCPServer textarea:focus,
+#panelServerRegistration #registerNewMCPServer button:focus {
   outline: none;
   border-color: #999;
   box-shadow: 0 0 0 2px rgba(0,0,0,0.06);
 }
 
 /* Button style copied from #chatForm button */
-#panelDataUpload #uploadBtn {
+#panelDataUpload #uploadBtn,
+#panelUserCreation #uploadBtnUserCreation,
+#panelServerRegistration #uploadBtnServerRegistration {
   padding: 14px 18px;
   border-radius: 10px;
   width: auto;
@@ -377,12 +429,74 @@ body.login-page {
   cursor: pointer;
 }
 
-#panelDataUpload #uploadBtn:hover {
+#panelDataUpload #uploadBtn:hover,
+#panelUserCreation #uploadBtnUserCreation:hover,
+#panelServerRegistration #uploadBtnServerRegistration:hover {
   filter: brightness(0.98);
 }
 
-#panelDataUpload #uploadBtn:active {
+#panelDataUpload #uploadBtn:active,
+#panelUserCreation #uploadBtnUserCreation:active,
+#panelServerRegistration #uploadBtnServerRegistration:active {
   filter: brightness(0.95);
+}
+
+.duroles-list,
+.srroles-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px 16px;
+  justify-items: start;
+  align-items: start;
+  text-align: left;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 6px 2px;
+}
+
+.durole-item,
+.srrole-item {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  white-space: normal;
+}
+
+.durole-item input[type="checkbox"],
+.srrole-item input[type="checkbox"]{
+  width: auto;
+  height: auto;
+  margin: 0;
+}
+
+.durole-item span,
+.srrole-item span {
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+/* hover effect */
+.durole-item:hover,
+.srrole-item:hover {
+  background: #f3f4f6;
+}
+
+/* ---- tools fieldset container ---- */
+#panelDataUpload fieldset,
+#panelServerRegistration fieldset {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+}
+
+/* legend title */
+#panelDataUpload legend,
+#panelServerRegistration legend{
+  font-weight: 500;
+  padding: 0 6px;
 }
 
 
@@ -396,6 +510,12 @@ body.login-page {
   flex-direction: column;
   gap: 14px;
   max-width: 900px;   /* keep it from stretching full page */
+}
+
+#panelUserCreation label[for="cuUsername"],
+#panelUserCreation label[for="cuPassword"],
+#panelUserCreation label[for="cuRole"]{
+  font-weight: 500;
 }
 
 /* make text inputs full-width, but NOT checkboxes/radios */

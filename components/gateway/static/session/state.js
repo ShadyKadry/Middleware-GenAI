@@ -3,6 +3,8 @@ import {
   loadSelectedAutoSearchK,
   loadSelectedCorpusIdsForAutoSearch,
   loadSelectedCorpusIdsForUserCreation,
+  loadSelectedRolesForDataUpload,
+  loadSelectedRolesForServerRegistration,
   loadSelectedServers,
   loadSelectedTools,
   resetLocalStorage,
@@ -10,6 +12,8 @@ import {
   saveSelectedAutoSearchK,
   saveSelectedCorpusIdsForAutoSearch,
   saveSelectedCorpusIdsForUserCreation,
+  saveSelectedRolesForDataUpload,
+  saveSelectedRolesForServerRegistration,
   saveSelectedServers,
   saveSelectedTools
 } from "./storage.js";
@@ -20,6 +24,8 @@ let selectedTools = new Set();  // chat
 let selectedServers = new Set();  // user creation
 let selectedCorpusIdsForAutoSearch = new Set();  // chat
 let selectedCorpusIdsForUserCreation = new Set();  // user creation
+let selectedAllowedRolesForDataUpload = new Set(); // data upload
+let selectedAllowedRolesForServerRegistration = new Set(); // server registration
 let selectedAutoSearchEnabled = false;  // chat
 let selectedAutoSearchK = 5;  // chat
 
@@ -28,6 +34,7 @@ let availableTools = new Set();
 let availableToolsList = []
 let availableCorpora = new Set();
 let availableCorporaList = [];
+const availableRoles = ["User", "Student", "Guest"];  //  'Admin' is not stated since admins have automatic access to all documents & tools
 let CURRENT_USER = null;
 let CURRENT_ROLE = null;
 let CHAT_SESSION_ID = null;
@@ -53,6 +60,11 @@ export function getAvailableServers() {
   return new Set(
     [...getAvailableTools()].map(t => t.split(".")[0])
   );
+}
+
+/*** Returns all currently available roles. ***/
+export function getAvailableRoles() {
+  return availableRoles;
 }
 
 
@@ -83,6 +95,26 @@ export function getSelectedServers() {
 export function setSelectedServers(servers) {
   selectedTools = new Set(servers ?? []);
   saveSelectedServers(selectedServers);
+}
+
+/*** Retrieves/sets the selected allowed user roles in the data upload panel.
+ Updates in-memory as well as LocalStorage values. ***/
+export function getSelectedAllowedRolesForDataUpload() {
+  return new Set(selectedAllowedRolesForDataUpload);
+}
+export function setSelectedAllowedRolesForDataUpload(selectedRoles) {
+  selectedAllowedRolesForDataUpload = new Set(selectedRoles ?? []);
+  saveSelectedRolesForDataUpload(selectedAllowedRolesForDataUpload);
+}
+
+/*** Retrieves/sets the selected allowed user roles in the MCP server registration panel.
+ Updates in-memory as well as LocalStorage values. ***/
+export function getSelectedAllowedRolesForServerRegistration() {
+  return new Set(selectedAllowedRolesForServerRegistration);
+}
+export function setSelectedAllowedRolesForServerRegistration(selectedRoles) {
+  selectedAllowedRolesForServerRegistration = new Set(selectedRoles ?? []);
+  saveSelectedRolesForServerRegistration(selectedAllowedRolesForServerRegistration);
 }
 
 
@@ -184,6 +216,8 @@ export function initStateFromLocalStorage() {
   selectedServers = loadSelectedServers();
   selectedCorpusIdsForAutoSearch = loadSelectedCorpusIdsForAutoSearch();
   selectedCorpusIdsForUserCreation = loadSelectedCorpusIdsForUserCreation();
+  selectedAllowedRolesForDataUpload = loadSelectedRolesForDataUpload();
+  selectedAllowedRolesForServerRegistration = loadSelectedRolesForServerRegistration();
   selectedAutoSearchEnabled = loadSelectedAutoSearchEnabled() ?? selectedAutoSearchEnabled;
   selectedAutoSearchK = loadSelectedAutoSearchK() ?? selectedAutoSearchK;
 }

@@ -224,6 +224,13 @@ export function wireDocumentUploadForm() {
     if (!formData.get("user_id") && currentUser) {
       formData.set("user_id", currentUser);
     }
+    const allowedRoles = [
+      ...document.querySelectorAll("#duRolesList input[type='checkbox']:checked")
+    ].map(cb => cb.value);
+    formData.delete("allowed_roles");
+    for (const role of allowedRoles) {
+      formData.append("allowed_roles", role);
+    }
 
     const res = await fetch("/api/admin/documents/upload", {
       method: "POST",
@@ -398,9 +405,9 @@ export function wireMcpRegistrationForm() {
     const allowedUsers = parseMultiValue(
       document.getElementById("mcpAllowedUsers")?.value || ""
     );
-    const requiredRoles = parseMultiValue(
-      document.getElementById("mcpRequiredRoles")?.value || ""
-    );
+    const allowedRoles = [
+      ...document.querySelectorAll("#srRolesList input[type='checkbox']:checked")
+    ].map(cb => cb.value);
 
     const enabled = !!document.getElementById("mcpEnabled")?.checked;
 
@@ -418,7 +425,7 @@ export function wireMcpRegistrationForm() {
       name,
       enabled,
       allowed_users: allowedUsers,
-      required_roles: requiredRoles,
+      allowed_roles: allowedRoles,
       transport,
     };
 

@@ -46,7 +46,7 @@ from .mcp_client import MCPClient
 # gateway project root
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# todo: where should ongoing sessions be saved? DB? in code is suboptimal security-wise... feature: move to DB and persist. also
+# todo: where should ongoing sessions be saved? DB? in code is suboptimal security-wise... feature: move to DB and persist
 CHAT_SESSIONS: Dict[str, Dict[str, Any]] = {}
 
 # minimal server-side invalidation for refresh tokens (iteration 1)
@@ -629,7 +629,10 @@ async def register_mcp_server(
     mcp_server = MCPServer(name=name, kind=kind, transport=transport, enabled=enabled, config=config)
 
     # build relations (this writes join tables on commit)
-    required_role_names = [x for x in _ensure_list(payload.get("required_roles"))]
+    extended_allowed_roles = _ensure_list(payload.get("allowed_roles"))
+    extended_allowed_roles.extend(["Admin", "Super-Admin"])
+
+    allowed_role_names = [x for x in extended_allowed_roles]
     allowed_usernames = [x for x in _ensure_list(payload.get("allowed_users"))]
 
     users: list[User] = []
@@ -643,13 +646,13 @@ async def register_mcp_server(
             raise HTTPException(status_code=400, detail=f"Unknown username(s): {missing}")
 
     roles: list[Role] = []
-    if required_role_names:
-        required_roles = list(dict.fromkeys(required_role_names))
-        res = await db.execute(select(Role).where(Role.name.in_(required_roles)))
+    if allowed_role_names:
+        allowed_roles = list(dict.fromkeys(allowed_role_names))
+        res = await db.execute(select(Role).where(Role.name.in_(allowed_roles)))
         roles = res.scalars().all()
 
         found = {r.name for r in roles}
-        missing = [name for name in required_roles if name not in found]
+        missing = [name for name in allowed_roles if name not in found]
         if missing:
             raise HTTPException(status_code=400, detail=f"Unknown role(s): {missing}")
 

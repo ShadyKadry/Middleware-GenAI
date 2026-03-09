@@ -42,23 +42,17 @@
         <h2>Upload documents.</h2>
 
         <form id="uploadForm">
-          <label for="uploadCorpusId">Corpus ID:</label>
+          <label for="uploadCorpusId">Collection ID:</label>
           <input id="uploadCorpusId" name="corpus_id" type="text" placeholder="Identifier which is used to store/retrieve the document..." required />
 
           <label for="uploadUserId">Allowed User ID's (optional):</label>
           <input id="uploadUserId" name="allowed_user_ids" type="text" placeholder="Please state the user's which are allowed to see this document... (seperated by ;)" />
 
-          <!-- Allowed Roles (optional) -->
-          <div class="form-group" style="margin-top: 16px;"> <!-- TODO move to css -->
-            <label for="uploadAllowedRoles">Allowed Roles (optional):</label>
-
-            <div id="uploadAllowedRoles" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 8px;"> <!-- TODO move to css -->
-              <!-- Example roles - adjust to your system -->
-              <label><input type="checkbox" name="allowed_roles" value="User" /> User</label>
-              <label><input type="checkbox" name="allowed_roles" value="Student" /> Student</label>
-              <label><input type="checkbox" name="allowed_roles" value="Guest" /> Guest</label>
-            </div>
-          </div>
+          <fieldset class="card" style="margin-top:12px;">
+            <legend>Allowed Roles (optional)</legend>
+            <div id="duRolesList" class="duroles-list"></div>
+            <input type="hidden" id="duAllowedRoles" name="allowed_roles" value="[]" />
+          </fieldset>
 
           <label for="uploadDatabaseModel">Database:</label>
           <select id="uploadDatabaseModel" name="database_model"></select>
@@ -95,22 +89,22 @@
         <h2>Create new user.</h2>
 
         <form id="createUserForm">
-          <input id="cuUsername" placeholder="Username" required />
+          <label for="cuUsername">Name:</label>
+          <input id="cuUsername" type="text" placeholder="The name the user can log-in as..." required />
 
+          <label for="cuPassword">Password:</label>
           <input id="cuPassword"
                  type="password"
                  placeholder="Password"
                  required />
 
-          <div class="inline-field">
-            <label for="cuRole">Role:</label>
-            <select id="cuRole">
-              <option value="Guest">Guest</option>
-              <option value="User">User</option>
-              <option value="Admin">Admin</option>
-              <option value="Student">Student</option>
-            </select>
-          </div>
+          <label for="cuRole">Role:</label>
+          <select id="cuRole">
+            <option value="Guest">Guest</option>
+            <option value="User">User</option>
+            <option value="Admin">Admin</option>
+            <option value="Student">Student</option>
+          </select>
 
           <fieldset class="card" style="margin-top:12px;">
             <legend>Select MCP Servers</legend>
@@ -124,7 +118,7 @@
             <input type="hidden" id="cuCorpora" name="cuCorpora" value="[]" />
           </fieldset>
 
-          <button type="submit">Create</button>
+          <button type="submit" id="uploadBtnUserCreation">Create</button>
         </form>
 
         <div id="createUserMsg"></div>
@@ -136,11 +130,11 @@
 
         <form id="registerNewMCPServer">
           <label for="mcpName">Name:</label>
-          <input id="mcpName" name="name" type="text" placeholder="unique server name" required />
+          <input id="mcpName" name="name" type="text" placeholder="Unique server name..." required />
 
           <label for="mcpTransport">Transport:</label>
           <select id="mcpTransport" name="transport">
-            <option value="stdio">docker (stdio)</option>
+            <option value="stdio">stdio (e.g docker)</option>
             <option value="sse">sse</option>
             <option value="http">http</option>
           </select>
@@ -169,18 +163,21 @@
             </div>
           </div>
 
-          <label for="mcpAllowedUsers">Allowed users (optional, ; separated):</label>
-          <input id="mcpAllowedUsers" name="allowed_users" type="text" placeholder="user;test_user_1" />
+          <label for="mcpAllowedUsers">Allowed users (optional):</label>
+          <input id="mcpAllowedUsers" name="allowed_users" type="text" placeholder="Specify individual users which should have access... (seperated by ;)" />
 
-          <label for="mcpRequiredRoles">Required roles (optional, ; separated):</label>
-          <input id="mcpRequiredRoles" name="required_roles" type="text" placeholder="admin;user" />
+          <fieldset class="card" style="margin-top:12px;">
+            <legend>Allowed Roles (optional)</legend>
+            <div id="srRolesList" class="srroles-list"></div>
+            <input type="hidden" id="srAllowedRoles" name="srAllowedRoles" value="[]" />
+          </fieldset>
 
           <label class="inline-field">
             <input id="mcpEnabled" name="enabled" type="checkbox" checked />
             Enabled
           </label>
 
-          <button type="submit">Register</button>
+          <button type="submit" id="uploadBtnServerRegistration">Register</button>
         </form>
         <div id="mcpRegisterStatus" class="upload-status"></div>
       </div>

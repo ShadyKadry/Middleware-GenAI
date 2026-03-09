@@ -1,4 +1,6 @@
 import {
+  renderAllowedRolesCheckboxesDataUpload,
+  renderAllowedRolesCheckboxesServerRegistration,
   renderCorporaCheckboxesAutoSearch,
   renderCorporaCheckboxesUserCreation,
   renderDatabaseModels,
@@ -64,6 +66,10 @@ async function loadMe() {
     renderDatabaseModels(payloadDB);
     const payloadEmb = await getEmbeddingModels().catch(() => null);
     renderEmbeddingModels(payloadEmb);
+
+    // render the static role checkboxes
+    renderAllowedRolesCheckboxesDataUpload();
+    renderAllowedRolesCheckboxesServerRegistration();
   }
 }
 

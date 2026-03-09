@@ -4,6 +4,8 @@ const SELECTED_CORPORA_AUTO_SEARCH_STORAGE_KEY = "enabled_corpora_auto_search_v1
 const SELECTED_CORPORA_USER_CREATION_STORAGE_KEY = "enabled_corpora_user_creation_v1"
 const SELECTED_AUTO_SEARCH_ENABLED_KEY = "enabled_auto_search_v1"
 const SELECTED_AUTO_SEARCH_K_KEY = "enabled_auto_search_k_results_v1"
+const SELECTED_ALLOWED_ROLES_DATA_UPLOAD_KEY = "enabled_allowed_roles_v1"
+const SELECTED_ALLOWED_ROLES_SERVER_REGISTRATION_KEY = "enabled_allowed_roles_v1"
 
 
 /**
@@ -46,6 +48,14 @@ export function loadSelectedCorpusIdsForAutoSearch() {
 
 export function loadSelectedCorpusIdsForUserCreation() {
   return loadSetFromLocalStorage(SELECTED_CORPORA_USER_CREATION_STORAGE_KEY);
+}
+
+export function loadSelectedRolesForDataUpload() {
+  return loadSetFromLocalStorage(SELECTED_ALLOWED_ROLES_DATA_UPLOAD_KEY);
+}
+
+export function loadSelectedRolesForServerRegistration() {
+  return loadSetFromLocalStorage(SELECTED_ALLOWED_ROLES_SERVER_REGISTRATION_KEY);
 }
 
 export function loadSelectedAutoSearchEnabled() {
@@ -99,6 +109,20 @@ export function saveSelectedCorpusIdsForAutoSearch(selectedCorpusIdsForAutoSearc
 export function saveSelectedCorpusIdsForUserCreation(selectedCorpusIdsForUserCreationToBeSaved) {
   try {
     localStorage.setItem(SELECTED_CORPORA_USER_CREATION_STORAGE_KEY, JSON.stringify([...selectedCorpusIdsForUserCreationToBeSaved]));
+  } catch (_) {}
+}
+
+
+export function saveSelectedRolesForDataUpload(selectedRolesForDataUpload) {
+  try {
+    localStorage.setItem(SELECTED_ALLOWED_ROLES_DATA_UPLOAD_KEY, JSON.stringify([...selectedRolesForDataUpload]));
+  } catch (_) {}
+}
+
+
+export function saveSelectedRolesForServerRegistration(selectedRolesForServerRegistration) {
+  try {
+    localStorage.setItem(SELECTED_ALLOWED_ROLES_SERVER_REGISTRATION_KEY, JSON.stringify([...selectedRolesForServerRegistration]));
   } catch (_) {}
 }
 
