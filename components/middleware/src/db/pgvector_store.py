@@ -191,10 +191,12 @@ class PgVectorStore(VectorStore):
                 rows = cur.fetchall()
 
         for row in rows:
+            cosine_distance = float(row["distance"])
+            cosine_similarity = 1-cosine_distance
             results.append(
                 SearchResult(
                     id=row["id"],
-                    score=float(row["distance"]),
+                    score=cosine_similarity,
                     metadata=row["metadata"],
                 )
             )

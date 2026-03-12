@@ -31,7 +31,7 @@ class TestMCPManager(unittest.IsolatedAsyncioTestCase):
         available_tools = [tool for backend in backends for tool in backend.get_tools()]
 
         # verify
-        self.assertEqual(len(available_servers), 4)
+        self.assertEqual(len(available_servers), 4)  # wikipedia_mcp, document_retrieval, deepwiki, youtube_transcripts (assuming no others were added)
         self.assertIn("deepwiki", available_servers)
         self.assertIn("document_retrieval", available_servers)
         self.assertIn("wikipedia_mcp", available_servers)

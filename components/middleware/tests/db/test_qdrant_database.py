@@ -1,8 +1,10 @@
 # tests/test_vector_databases.py
 
 import unittest
+from typing import List, Dict, Any
 
 from db.qdrant_store import QdrantVectorStore
+from db.vector_store import VectorRecord
 from embedding_manager.embedding_manager import EmbeddingManager
 from embedding_manager.embedding_backend import StubEmbeddingModel
 
@@ -17,10 +19,12 @@ IMPORTANT:
 
 class TestQdrantEmbeddingManager(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        # Same wiring as your debug script
         self.store = QdrantVectorStore()
         self.model = StubEmbeddingModel(dim=256)
         self.em = EmbeddingManager(embedding_model=self.model, vector_store=self.store)
+
+        self.user_id = "test_user"
+        self.user_role = "Admin"
 
     async def test_search_demo_corpus(self) -> None:
         """
@@ -29,13 +33,21 @@ class TestQdrantEmbeddingManager(unittest.IsolatedAsyncioTestCase):
         - run a semantic search
         - assert we get some reasonable-looking results back
         """
-        corpus_id = "demo_corpus"
-        await self.store.bootstrap_demo_corpus(self.model, collection=corpus_id)
+        corpus_id = "test_corpus"
+
+        await bootstrap_demo_corpus(
+            qdrant=self.store,
+            embedding_model=self.model,
+            uploader=self.user_id,
+            collection=corpus_id,
+            allowed_users=[self.user_id],
+            allowed_roles=[self.user_role],
+        )
 
         query = "I would like to learn more about RAG."  # sentence is present in bootstrapped demo_corpus
         result = await self.em.search_documents(
-            user_id="user",
-            user_role="Admin",
+            user_id=self.user_id,
+            user_role=self.user_role,
             corpus_id=corpus_id,
             query=query,
             k=5,
@@ -59,18 +71,19 @@ class TestQdrantEmbeddingManager(unittest.IsolatedAsyncioTestCase):
         - assert the right docs come back
         """
         corpus_id = "test_upsert_corpus"
-        user_id = "user_upsert"
         text = "RAG stands for retrieval augmented generation."
 
         documents = [
             {
                 "id": "doc1",
                 "text": text,
+                "allowed_users": [self.user_id],
+                "allowed_roles": [self.user_role],
             },
         ]
 
         upsert_result = await self.em.upsert_documents(
-            user_id=user_id,
+            uploaded_by=self.user_id,
             corpus_id=corpus_id,
             documents=documents,
         )
@@ -81,7 +94,8 @@ class TestQdrantEmbeddingManager(unittest.IsolatedAsyncioTestCase):
 
         # Now search for something that should clearly hit doc1
         search_result = await self.em.search_documents(
-            user_id=user_id,
+            user_id=self.user_id,
+            user_role=self.user_role,
             corpus_id=corpus_id,
             query=text,
             k=5,
@@ -104,6 +118,63 @@ class TestQdrantEmbeddingManager(unittest.IsolatedAsyncioTestCase):
 
     # TODO: test failing upsert and failing search cases
 
+
+async def bootstrap_demo_corpus(
+        qdrant: QdrantVectorStore,
+        embedding_model,
+        uploader: str,
+        collection: str,
+        allowed_users: list,
+        allowed_roles: list
+) -> None:
+    """
+    Creates a small demo corpus with pre-defined sentences.
+    The resulting collection will only be available for the provided allowed users and roles (union).
+    """
+    # some dummy data to be stored in the database
+    sentences = [
+        "The Eiffel Tower is located in Paris, France.",
+        "Python is a popular programming language for data science.",
+        "The stock market can be very volatile during economic crises.",
+        "Soccer is the most popular sport in many countries.",
+        "Climate change is affecting weather patterns worldwide.",
+        "Neural networks are a core technique in modern AI.",
+        "Coffee is made from roasted coffee beans.",
+        "The Great Wall of China is visible from certain satellites.",
+        "Quantum computing uses qubits instead of classical bits.",
+        "Mount Everest is the highest mountain above sea level.",
+        "I would like to learn more about RAG.",
+        "I would like to learn less about RAG.",
+        "I would love to learn everything about RAG.",
+    ]
+    vectors = embedding_model.embed(sentences)
+
+    # ensure collection exists
+    dim = embedding_model.dim
+    await qdrant.get_or_create_collection(collection, dim)
+
+    # create a new database-agnostic data transfer object for each document/text we want to upload
+    records: List[VectorRecord] = []
+    for idx, (sentence, vector) in enumerate(zip(sentences, vectors)):
+        # data to store
+        metadata: Dict[str, Any] = {
+            "user_id": uploader,
+            "text": sentence,
+            "allowed_users": allowed_users,
+            "allowed_roles": allowed_roles,
+        }
+        records.append(
+            VectorRecord(
+                id=str(idx+1),  # needed to create unique point IDs (see upsert_points() above) fixme indexing from 0 is prone to accidental overwrites
+                vector=vector,
+                metadata=metadata,
+            )
+        )
+
+    await qdrant.upsert_records(
+        collection=collection,
+        records=records,
+    )
 
 if __name__ == "__main__":
     # Allows `python tests/db/test_vector_databases.py` as well as `python -m unittest`

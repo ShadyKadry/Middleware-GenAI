@@ -29,7 +29,7 @@ class VectorRecord:
 @dataclass
 class SearchResult:
     id: str
-    score: float
+    score: float   # use cosine similarity; higher is better
     metadata: Dict[str, Any]
 
 
@@ -124,6 +124,11 @@ class VectorStore(Protocol):
         """
         Perform a vector similarity search with optional filtering.
 
+        IMPORTANT: Search semantics (cosine, dot product, L2) depend on backend configuration, this project uses
+                   cosine similarity for retrieval, so in order to don't confuse the processing LLM, implementations
+                   should:
+                   => use cosine similarity as score metric
+
         Args:
             collection (str):
                 The logical collection/index/table to query.
@@ -153,7 +158,6 @@ class VectorStore(Protocol):
                 Additional backend-specific fields SHOULD NOT be included.
 
         Notes:
-            - Search semantics (cosine, dot product, L2) depend on backend configuration.
             - Backends must ensure that access constraints are enforced securely.
         """
         ...

@@ -16,9 +16,8 @@ IMPORTANT:
 
 class TestQdrantEmbeddingManager(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        # Same wiring as your debug script
         self.store = PgVectorStore()
-        self.model = StubEmbeddingModel(dim=256)
+        self.model = StubEmbeddingModel(dim=256)  # the dummy embeddings (exact same sentences are embedded deterministically; no semantic modeling apart from that)
         self.em = EmbeddingManager(embedding_model=self.model, vector_store=self.store)
 
 
@@ -28,8 +27,8 @@ class TestQdrantEmbeddingManager(unittest.IsolatedAsyncioTestCase):
         - search for them
         - assert the right docs come back
         """
-        corpus_id = "test_upsert_corpus"
-        user_id = "user_upsert"
+        corpus_id = "test_corpus"
+        user_id = "test_user"
         user_role = "Admin"
         text = "RAG stands for retrieval augmented generation."
 
@@ -37,6 +36,8 @@ class TestQdrantEmbeddingManager(unittest.IsolatedAsyncioTestCase):
             {
                 "id": "doc1",
                 "text": text,
+                "allowed_users": ["test_user"],
+                "allowed_roles": ["Admin"],
             },
         ]
 
