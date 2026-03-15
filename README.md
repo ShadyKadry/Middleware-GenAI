@@ -27,6 +27,7 @@ This repository contains:
 Before starting you need to ensure you have the following available:
 * **Google AI API Key**: Lets you integrate gemini models.
   * Tutorial on how to get the free-tier API key: [here](https://www.youtube.com/watch?v=prrb0hsfI60&t=9s)
+  * Please note: Uploading/Embedding large documents burns through the free-tier budget really quick. Try to work with smaller files.
 * **Docker (Desktop)**: Hosts databases and MCP servers.
   * Preinstall following MCP servers (via `MCP Toolkit` tab):
     * `YouTube Transcripts`
@@ -44,6 +45,7 @@ From repository root:
    python -m venv .venv
    .\.venv\Scripts\Activate.ps1
    ```
+   **Please note**: Magika 0.6.3 on Windows requires onnxruntime<=1.20.1, so pip cannot resolve the dependencies. Fix it by downgrading onnxruntime to 1.20.1.
 3. Install dependencies:
    ```powershell
    pip install -r components/middleware/requirements.txt
