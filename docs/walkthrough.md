@@ -1,7 +1,7 @@
 # Walkthrough
 
 Assumes that all steps of the "Quick Setup (Local)" have been successfully executed, and you're now logged in as the systems root user:
-- user name: ``Admin``
+- user name: ``Admin`` (Capital A)
 - user role: ``Super-Admin``
 
 Through the pre-installed root user, you have access to a selection of pre-installed MCP servers. However, no documents are available yet.
