@@ -59,7 +59,7 @@ From repository root:
 6. Open UI in browser:
    - http://127.0.0.1:8000
 7. **Login** as systems root user (present after executing step 4 for the first time):
-   - Username: `Admin`
+   - Username: `Admin` (capital A)
    - Password: `adminpass`
 
 
